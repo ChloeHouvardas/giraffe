@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* Warm burgundy palette - library inspired */
+  /* Warm burgundy palette */
   --color-primary: #8b4049;        /* Deep burgundy/wine */
   --color-primary-dark: #6d3238;   
   --color-primary-light: #a35359;
