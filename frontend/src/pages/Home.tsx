@@ -1,6 +1,10 @@
 import TextArea from "../components/TextArea";
+import FileUpload from "../components/FileUpload";
+import {useState} from "react";
 
 export default function Home() {
+    const [textContent, setTextContent] = useState<string>('');
+    const [uploadedFile, setUploadedFile] = useState<File | null>(null);
     return (
         <div className = "min-h-screen flex items-center justify-center">
             <div className="text-center">
@@ -14,8 +18,13 @@ export default function Home() {
                     <TextArea
                         label="Enter your text here"
                         placeholder="Type something..."
-                        value=""
-                        onChange={(value) => console.log(value)}
+                        value={textContent}
+                        onChange={setTextContent}
+                    />
+                    <FileUpload
+                        accept="image/png, image/jpeg"
+                        label="Upload an image"
+                        onFileSelect={setUploadedFile}
                     />
                 </div>
             </div>
