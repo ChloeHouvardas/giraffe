@@ -14,19 +14,32 @@ export default function Home() {
                 <p className="text-lg text-text-subdued">
                     Let's get learning
                 </p>
-                <div className="mt-8 max-w-md mx-auto">
-                    <TextArea
-                        label="Enter your text here"
-                        placeholder="Type something..."
-                        value={textContent}
-                        onChange={setTextContent}
-                    />
-                    <FileUpload
-                        accept="image/png, image/jpeg"
-                        label="Upload an image"
-                        onFileSelect={setUploadedFile}
-                    />
+
+                <div className="flex flex-row gap-20 mt-8 max-w-4xl mx-auto items-stretch">
+                    <div className="flex-1 flex flex-col">
+                        <TextArea
+                            label="Enter your text here"
+                            placeholder="Type something..."
+                            value={textContent}
+                            onChange={setTextContent}
+                        />
+                    </div>
+
+                    <div className="flex flex-col justify-center text-text-subdued">
+                        OR
+                    </div>
+
+                    <div className="flex-1 flex flex-col">
+                        <FileUpload
+                            accept="image/png, image/jpeg"
+                            label="Upload an image"
+                            onFileSelect={setUploadedFile}
+                        />
+                    </div>
                 </div>
+                
+
+
             </div>
         </div>
         

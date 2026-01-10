@@ -18,12 +18,13 @@ export default function FileUpload({accept, label, onFileSelect}: FileUploadProp
     }
 
     return (
-        <div className = "w-full">
+        // TODO fix file upload box length changing issue => should stay a fixed length 
+        <div className="w-full h-full flex flex-col">
             <label className="block text-sm font-medium text-text-subdued mb-2">
                 {label}
             </label>
 
-            <div className="relative">
+            <div className="relative flex-1">
                 <input
                     type="file"
                     accept={accept}
@@ -33,10 +34,10 @@ export default function FileUpload({accept, label, onFileSelect}: FileUploadProp
                 />
                 <label
                     htmlFor={`file-upload-${label}`}
-                    className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary hover:bg-tertiary transition-all"
+                    className="flex items-center justify-center w-full h-full px-4 py-3 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary hover:bg-tertiary transition-all"
                     >
                         <div className="text-center">
-                            <p className="text-sm text-text-subdued">
+                            <p className="text-sm text-text-subdued truncate">
                                 {fileName || 'Click to upload or drag and drop'}
                             </p>
                         </div>
