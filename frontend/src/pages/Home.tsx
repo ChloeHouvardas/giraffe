@@ -1,3 +1,5 @@
+import TextArea from "../components/TextArea";
+
 export default function Home() {
     return (
         <div className = "min-h-screen flex items-center justify-center">
@@ -8,6 +10,14 @@ export default function Home() {
                 <p className="text-lg text-text-subdued">
                     Let's get learning
                 </p>
+                <div className="mt-8 max-w-md mx-auto">
+                    <TextArea
+                        label="Enter your text here"
+                        placeholder="Type something..."
+                        value=""
+                        onChange={(value) => console.log(value)}
+                    />
+                </div>
             </div>
         </div>
         
