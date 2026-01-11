@@ -92,12 +92,12 @@ export default function FlashcardGenerator() {
                         id="difficulty-select"
                         value={difficulty}
                         onChange={(e) => setDifficulty(e.target.value)}
-                        className="p-2 border border-border-default rounded-md"
+                        className="bg-bg-tertiary p-2 border border-border-default rounded-md"
                         disabled={loading}
                     >
                         <option value="easy">Easy</option>
                         <option value="medium">Medium</option>
-                        <option value="hard">Hard</option>
+                        <option value="hard">Hard</option>t
                     </select>
                 </div>
 

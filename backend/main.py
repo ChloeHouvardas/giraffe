@@ -53,14 +53,26 @@ async def generate_flashcards(input_data: TextInput):
             messages=[{
                 "role": "user",
                 "content": f"""
-                Generate flashcards from the text below.
-                Return ONLY valid JSON in this format:
-
+                Extract vocabulary words from the text below and create flashcards.
+                
+                STRICT RULES:
+                1. Front: ONE word in the source language (e.g., "chien")
+                2. Back: ONE word English translation (e.g., "dog")
+                3. NO phrases, NO sentences, NO definitions - ONLY single words
+                4. If a word has multiple translations, pick the most common one
+                5. Extract at least 10-15 words if the text is long enough
+                6. Return ONLY valid JSON array, no markdown, no explanation
+                
+                Example output:
                 [
-                {{ "front": "...", "back": "..." }}
+                    {{"front": "chien", "back": "dog"}},
+                    {{"front": "chat", "back": "cat"}},
+                    {{"front": "maison", "back": "house"}}
                 ]
-
-                Text:
+                
+                Difficulty: {input_data.difficulty}
+                
+                Text to analyze:
                 {input_data.text}
                 """
             }]
@@ -81,6 +93,7 @@ async def generate_flashcards(input_data: TextInput):
 def parse_flashcards(ai_response: str) -> list[dict]:
     return json.loads(ai_response)
 
+# @app.post("/api/uploadtext")
 
 
     
