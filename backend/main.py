@@ -9,8 +9,6 @@ import json
 
 load_dotenv()
 
-print("Anthropic API Key:", os.environ.get("ANTHROPIC_API_KEY"))
-
 app = FastAPI()
 
 @app.get("/")
