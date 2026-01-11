@@ -1,5 +1,6 @@
 import {BrowserRouter, Routes, Route} from 'react-router-dom'
 import Home from './pages/Home'
+import FlashcardsView from './pages/FlashcardsView'
 
 function App() {
   return (
@@ -9,6 +10,7 @@ function App() {
         <main>
           <Routes>
             <Route path="/" element={<Home/>}/>
+            <Route path="/flashcardsview" element={<FlashcardsView/>}/>
           </Routes>
         </main>
       </div>

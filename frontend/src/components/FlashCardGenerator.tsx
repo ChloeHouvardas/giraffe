@@ -1,6 +1,7 @@
 import { useState } from "react";
 import TextArea from "./TextArea";
 import FileUpload from "./FileUpload";
+import { useNavigate } from "react-router-dom";
 
 interface Flashcard {
     front: string;
@@ -14,6 +15,8 @@ export default function FlashcardGenerator() {
     const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+
+    const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -45,6 +48,15 @@ export default function FlashcardGenerator() {
             const data = await response.json();
             setFlashcards(data.flashcards);
             console.log('Generated flashcards:', data.flashcards);
+
+            // Navigate to FlashcardsView and pass the data
+            navigate('/flashcardsview', { 
+                state: { 
+                    flashcards: data.flashcards,
+                    sourceText: textContent,
+                    difficulty: difficulty
+                } 
+            });
             
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
