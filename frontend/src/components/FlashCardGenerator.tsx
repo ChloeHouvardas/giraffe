@@ -41,22 +41,19 @@ export default function FlashcardGenerator() {
                 }),
             });
 
+            // Get the response data first
+            const data = await response.json();
+
+            // Then check if it was successful
             if (!response.ok) {
-                throw new Error(`Error: ${response.status}`);
+                throw new Error(data.detail || `Error: ${response.status}`);
             }
 
-            const data = await response.json();
-            setFlashcards(data.flashcards);
-            console.log('Generated flashcards:', data.flashcards);
-
-            // Navigate to FlashcardsView and pass the data
-            navigate('/flashcardsview', { 
-                state: { 
-                    flashcards: data.flashcards,
-                    sourceText: textContent,
-                    difficulty: difficulty
-                } 
-            });
+            console.log('Generated deck:', data.deck_id);
+            console.log('Flashcards:', data.flashcards);
+            
+            // Navigate to FlashcardsView with deck ID in URL
+            navigate(`/flashcards/${data.deck_id}`);
             
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -65,7 +62,6 @@ export default function FlashcardGenerator() {
             setLoading(false);
         }
     };
-
     return (
         <div className="w-full max-w-4xl mx-auto">
             <form onSubmit={handleSubmit}>

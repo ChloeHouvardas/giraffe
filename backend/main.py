@@ -1,5 +1,5 @@
 from typing import Union
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from anthropic import Anthropic
@@ -9,7 +9,28 @@ import json
 
 load_dotenv()
 
+import re
+import uuid
+
+# TODO should seperate endpoints
+# Import database stuff
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from src.database import get_db
+from src.models import Deck, Flashcard
+
 app = FastAPI()
+
+print("="*80)
+print("ENVIRONMENT VARIABLES CHECK:")
+api_key = os.getenv("ANTHROPIC_API_KEY")
+if api_key:
+    print(f"✅ ANTHROPIC_API_KEY found: {api_key[:20]}...")
+    print(f"   Length: {len(api_key)} characters")
+    print(f"   Starts with: {api_key[:10]}")
+else:
+    print("❌ ANTHROPIC_API_KEY not found in environment!")
+print("="*80)
 
 @app.get("/")
 def read_root():
@@ -33,65 +54,156 @@ class TextInput(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
     difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
 
-# Response model for type safety
 class FlashcardResponse(BaseModel):
+    deck_id: str              # ← Added
     flashcards: list[dict]
     count: int
+    difficulty: str           # ← Added
     processing_time: float
 
 @app.post("/api/generate-flashcards", response_model=FlashcardResponse)
-async def generate_flashcards(input_data: TextInput):
+async def generate_flashcards(
+    input_data: TextInput,
+    db: AsyncSession = Depends(get_db)  # Add database dependency
+):
+    """Generate flashcards from text using AI and save to database"""
+    print(f"\n{'='*80}")
+    print(f"📝 Generating flashcards:")
+    print(f"   Text: {input_data.text[:100]}...")
+    print(f"   Difficulty: {input_data.difficulty}")
+    
     try:
-        client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
+        # Generate flashcards with AI (your existing code)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
         
+        client = Anthropic(api_key=api_key)
+        
+        print(f"🤖 Calling Claude API...")
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=4096,
             messages=[{
                 "role": "user",
                 "content": f"""
-                Extract vocabulary words from the text below and create flashcards.
+                Extract vocabulary words and create flashcards.
                 
                 STRICT RULES:
-                1. Front: ONE word in the source language (e.g., "chien")
-                2. Back: ONE word English translation (e.g., "dog")
-                3. NO phrases, NO sentences, NO definitions - ONLY single words
-                4. If a word has multiple translations, pick the most common one
-                5. Extract at least 10-15 words if the text is long enough
-                6. Return ONLY valid JSON array, no markdown, no explanation
+                1. Front: ONE word (e.g., "chien")
+                2. Back: ONE word translation (e.g., "dog")
+                3. NO phrases - ONLY single words
+                4. Return ONLY valid JSON array, no markdown
                 
-                Example output:
-                [
-                    {{"front": "chien", "back": "dog"}},
-                    {{"front": "chat", "back": "cat"}},
-                    {{"front": "maison", "back": "house"}}
-                ]
+                Example: [{{"front": "chien", "back": "dog"}}]
                 
                 Difficulty: {input_data.difficulty}
-                
-                Text to analyze:
-                {input_data.text}
+                Text: {input_data.text}
                 """
             }]
         )
         
-        # Parse AI response into structured data
-        flashcards = parse_flashcards(message.content[0].text)
-
-        return FlashcardResponse(
-            flashcards=flashcards,
-            count=len(flashcards),
-            processing_time=1.5  # You'd calculate this
+        ai_response = message.content[0].text
+        print(f"📥 AI Response received")
+        
+        # Parse flashcards (your existing parse_flashcards function)
+        flashcards_data = parse_flashcards(ai_response)
+        print(f"✅ Parsed {len(flashcards_data)} flashcards")
+        
+        # NEW: Save to database
+        print(f"💾 Saving to database...")
+        
+        # Create deck
+        deck = Deck(
+            id=uuid.uuid4(),
+            title=f"Deck from {input_data.text[:30]}...",
+            source_text=input_data.text[:500],
+            difficulty=input_data.difficulty
         )
+        db.add(deck)
+        await db.flush()  # Get the deck ID
+        
+        # Create flashcards
+        for card_data in flashcards_data:
+            flashcard = Flashcard(
+                deck_id=deck.id,
+                front=card_data["front"],
+                back=card_data["back"]
+            )
+            db.add(flashcard)
+        
+        await db.commit()
+        await db.refresh(deck)
+        
+        print(f"✅ Saved deck {deck.id} with {len(flashcards_data)} flashcards")
+        print(f"{'='*80}\n")
+        
+        # Return response with deck_id
+        return {
+            "deck_id": str(deck.id),
+            "flashcards": flashcards_data,
+            "count": len(flashcards_data),
+            "difficulty": input_data.difficulty,
+            "processing_time": 1.5
+        }
     
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ ERROR: {e}")
+        import traceback
+        print(traceback.format_exc())
+        print(f"{'='*80}\n")
         raise HTTPException(status_code=500, detail=str(e))
 
 def parse_flashcards(ai_response: str) -> list[dict]:
     return json.loads(ai_response)
 
-# @app.post("/api/uploadtext")
 
-
+@app.get("/api/decks/{deck_id}")
+async def get_deck(
+    deck_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve a deck and its flashcards by ID"""
+    try:
+        from sqlalchemy import select
+        
+        # Convert string to UUID
+        try:
+            deck_uuid = uuid.UUID(deck_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid deck ID format")
+        
+        # Query deck
+        result = await db.execute(
+            select(Deck).where(Deck.id == deck_uuid)
+        )
+        deck = result.scalar_one_or_none()
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        # Query flashcards
+        flashcards_result = await db.execute(
+            select(Flashcard).where(Flashcard.deck_id == deck_uuid)
+        )
+        flashcards = flashcards_result.scalars().all()
+        
+        return {
+            "deck_id": str(deck.id),
+            "title": deck.title,
+            "flashcards": [
+                {"front": f.front, "back": f.back} 
+                for f in flashcards
+            ],
+            "count": len(flashcards),
+            "difficulty": deck.difficulty,
+            "created_at": deck.created_at.isoformat()
+        }
     
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching deck: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

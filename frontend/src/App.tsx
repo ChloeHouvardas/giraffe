@@ -9,8 +9,8 @@ function App() {
         {/* <Header /> */}
         <main>
           <Routes>
-            <Route path="/" element={<Home/>}/>
-            <Route path="/flashcardsview" element={<FlashcardsView/>}/>
+            <Route path="/" element={<Home />} />
+            <Route path="/flashcards/:deckId" element={<FlashcardsView />} />
           </Routes>
         </main>
       </div>
