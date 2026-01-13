@@ -3,16 +3,16 @@ import TextArea from "./TextArea";
 import FileUpload from "./FileUpload";
 import { useNavigate } from "react-router-dom";
 
-interface Flashcard {
-    front: string;
-    back: string;
-}
+// interface Flashcard {
+//     front: string;
+//     back: string;
+// }
 
 export default function FlashcardGenerator() {
     const [textContent, setTextContent] = useState<string>('');
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
     const [difficulty, setDifficulty] = useState<string>('medium');
-    const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+    // const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
