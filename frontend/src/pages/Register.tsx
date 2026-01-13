@@ -9,8 +9,14 @@ export const Register = () => {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const { signUp } = useAuth()
+  const { signUp, user } = useAuth()
   const navigate = useNavigate()
+
+// Redirect if already logged in
+  if (user) {
+    navigate('/')
+    return null
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
