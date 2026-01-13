@@ -22,6 +22,15 @@ from src.models import Deck, Flashcard
 app = FastAPI()
 
 print("="*80)
+print("DATABASE URL CHECK:")
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    print(f"✅ DATABASE_URL found: {database_url[:5]}...")
+else:
+    print("❌ DATABASE_URL not found!")
+print("="*80)
+
+print("="*80)
 print("ENVIRONMENT VARIABLES CHECK:")
 api_key = os.getenv("ANTHROPIC_API_KEY")
 if api_key:
@@ -35,6 +44,16 @@ print("="*80)
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+from sqlalchemy import text
+
+@app.get("/api/test-db")
+async def test_db(db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(text("SELECT 1"))
+        return {"status": "✅ Database connected!", "result": result.scalar()}
+    except Exception as e:
+        return {"status": "❌ Database connection failed", "error": str(e)}
 
 @app.get("/items/{item_id}")
 def read_item(item_id:int, q: Union[str, None] = None):
@@ -53,6 +72,7 @@ app.add_middleware(
 class TextInput(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
     difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
+    user_id: str 
 
 class FlashcardResponse(BaseModel):
     deck_id: str              # ← Added
@@ -71,6 +91,7 @@ async def generate_flashcards(
     print(f"📝 Generating flashcards:")
     print(f"   Text: {input_data.text[:100]}...")
     print(f"   Difficulty: {input_data.difficulty}")
+    print(f"   User ID: {input_data.user_id}") 
     
     try:
         # Generate flashcards with AI (your existing code)
@@ -112,13 +133,20 @@ async def generate_flashcards(
         
         # NEW: Save to database
         print(f"💾 Saving to database...")
+
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(input_data.user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
         
         # Create deck
         deck = Deck(
             id=uuid.uuid4(),
             title=f"Deck from {input_data.text[:30]}...",
             source_text=input_data.text[:500],
-            difficulty=input_data.difficulty
+            difficulty=input_data.difficulty,
+            user_id=user_uuid 
         )
         db.add(deck)
         await db.flush()  # Get the deck ID
@@ -128,7 +156,8 @@ async def generate_flashcards(
             flashcard = Flashcard(
                 deck_id=deck.id,
                 front=card_data["front"],
-                back=card_data["back"]
+                back=card_data["back"],
+                user_id=user_uuid
             )
             db.add(flashcard)
         

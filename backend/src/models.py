@@ -10,10 +10,11 @@ class Deck(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False) 
     source_text = Column(Text, nullable=True)
     difficulty = Column(String, default="medium")
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    
+
     # Relationship to flashcards
     flashcards = relationship("Flashcard", back_populates="deck", cascade="all, delete-orphan")
     
@@ -25,6 +26,7 @@ class Flashcard(Base):
     
     id = Column(Integer, primary_key=True)
     deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False) 
     front = Column(Text, nullable=False)
     back = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

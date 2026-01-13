@@ -2,6 +2,7 @@ import { useState } from "react";
 import TextArea from "./TextArea";
 import FileUpload from "./FileUpload";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";  
 
 // interface Flashcard {
 //     front: string;
@@ -17,12 +18,18 @@ export default function FlashcardGenerator() {
     const [error, setError] = useState<string | null>(null);
 
     const navigate = useNavigate();
+    const { user } = useAuth(); 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
         if (!textContent.trim() && !uploadedFile) {
             setError('Please provide text or upload a file');
+            return;
+        }
+        
+        if (!user) {
+            setError('You must be logged in to generate flashcards');
             return;
         }
         
@@ -37,7 +44,8 @@ export default function FlashcardGenerator() {
                 },
                 body: JSON.stringify({
                     text: textContent,
-                    difficulty: difficulty
+                    difficulty: difficulty,
+                    user_id: user.id  
                 }),
             });
 
