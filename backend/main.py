@@ -75,18 +75,30 @@ class TextInput(BaseModel):
     user_id: str 
 
 class FlashcardResponse(BaseModel):
-    deck_id: str              # ← Added
+    deck_id: str              # Temporary ID for preview
     flashcards: list[dict]
     count: int
-    difficulty: str           # ← Added
+    difficulty: str
     processing_time: float
+    source_text: str          # Source text for saving later
+    default_title: str        # Default title for preview
+
+class DeckCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    flashcards: list[dict] = Field(..., description="List of flashcards with 'front' and 'back' keys")
+    difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
+    source_text: Optional[str] = Field(None, max_length=500)
+    user_id: str
+
+class DeckUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=200)
 
 @app.post("/api/generate-flashcards", response_model=FlashcardResponse)
 async def generate_flashcards(
     input_data: TextInput,
-    db: AsyncSession = Depends(get_db)  # Add database dependency
+    db: AsyncSession = Depends(get_db)  # Keep for future use, but don't save yet
 ):
-    """Generate flashcards from text using AI and save to database"""
+    """Generate flashcards from text using AI (does NOT save to database)"""
     print(f"\n{'='*80}")
     print(f"📝 Generating flashcards:")
     print(f"   Text: {input_data.text[:100]}...")
@@ -131,49 +143,22 @@ async def generate_flashcards(
         flashcards_data = parse_flashcards(ai_response)
         print(f"✅ Parsed {len(flashcards_data)} flashcards")
         
-        # NEW: Save to database
-        print(f"💾 Saving to database...")
-
-        # Convert user_id string to UUID
-        try:
-            user_uuid = uuid.UUID(input_data.user_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        # Generate a temporary ID for the preview (not saved to DB)
+        temp_deck_id = str(uuid.uuid4())
+        default_title = f"Deck from {input_data.text[:30]}..."
         
-        # Create deck
-        deck = Deck(
-            id=uuid.uuid4(),
-            title=f"Deck from {input_data.text[:30]}...",
-            source_text=input_data.text[:500],
-            difficulty=input_data.difficulty,
-            user_id=user_uuid 
-        )
-        db.add(deck)
-        await db.flush()  # Get the deck ID
-        
-        # Create flashcards
-        for card_data in flashcards_data:
-            flashcard = Flashcard(
-                deck_id=deck.id,
-                front=card_data["front"],
-                back=card_data["back"],
-                user_id=user_uuid
-            )
-            db.add(flashcard)
-        
-        await db.commit()
-        await db.refresh(deck)
-        
-        print(f"✅ Saved deck {deck.id} with {len(flashcards_data)} flashcards")
+        print(f"📋 Generated preview (not saved to database)")
         print(f"{'='*80}\n")
         
-        # Return response with deck_id
+        # Return response with temporary deck_id (not saved)
         return {
-            "deck_id": str(deck.id),
+            "deck_id": temp_deck_id,
             "flashcards": flashcards_data,
             "count": len(flashcards_data),
             "difficulty": input_data.difficulty,
-            "processing_time": 1.5
+            "processing_time": 1.5,
+            "source_text": input_data.text[:500],  # Include for saving later
+            "default_title": default_title  # Include default title
         }
     
     except HTTPException:
@@ -251,6 +236,58 @@ async def get_my_decks(
         print(f"Error fetching decks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/decks", response_model=dict)
+async def create_deck(
+    deck_data: DeckCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new deck with flashcards (called from preview page)"""
+    try:
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(deck_data.user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        
+        # Create deck
+        deck = Deck(
+            id=uuid.uuid4(),
+            title=deck_data.title,
+            source_text=deck_data.source_text,
+            difficulty=deck_data.difficulty,
+            user_id=user_uuid 
+        )
+        db.add(deck)
+        await db.flush()  # Get the deck ID
+        
+        # Create flashcards
+        for card_data in deck_data.flashcards:
+            flashcard = Flashcard(
+                deck_id=deck.id,
+                front=card_data["front"],
+                back=card_data["back"],
+                user_id=user_uuid
+            )
+            db.add(flashcard)
+        
+        await db.commit()
+        await db.refresh(deck)
+        
+        print(f"✅ Created deck {deck.id} with {len(deck_data.flashcards)} flashcards")
+        
+        return {
+            "deck_id": str(deck.id),
+            "title": deck.title,
+            "count": len(deck_data.flashcards),
+            "difficulty": deck.difficulty
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating deck: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/decks/{deck_id}")
 async def get_deck(
     deck_id: str,
@@ -298,9 +335,6 @@ async def get_deck(
     except Exception as e:
         print(f"Error fetching deck: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-class DeckUpdate(BaseModel):
-    title: Optional[str] = Field(None, max_length=200)
 
 @app.put("/api/decks/{deck_id}")
 async def update_deck(

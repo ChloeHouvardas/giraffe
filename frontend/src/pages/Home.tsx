@@ -53,25 +53,25 @@ export default function Home() {
                 >
                     My Decks
                 </Link>
-                <button
-                    onClick={handleLogout}
+            <button
+                onClick={handleLogout}
                     className="px-6 py-3 rounded transition-all"
-                    style={{
-                        backgroundColor: 'var(--color-bg-secondary)',
-                        border: '1px solid var(--color-border)',
-                        color: 'var(--color-text)',
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--color-bg-tertiary)'
-                        e.currentTarget.style.borderColor = 'var(--color-primary)'
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)'
-                        e.currentTarget.style.borderColor = 'var(--color-border)'
-                    }}
-                >
-                    Sign Out
-                </button>
+                style={{
+                    backgroundColor: 'var(--color-bg-secondary)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-text)',
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-bg-tertiary)'
+                    e.currentTarget.style.borderColor = 'var(--color-primary)'
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)'
+                    e.currentTarget.style.borderColor = 'var(--color-border)'
+                }}
+            >
+                Sign Out
+            </button>
             </div>
 
             <div className="text-center w-full max-w-4xl mx-auto px-4">

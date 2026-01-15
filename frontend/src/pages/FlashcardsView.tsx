@@ -246,7 +246,7 @@ export default function FlashcardsView() {
             <div className="flex items-center justify-center p-6 pt-12">
                 <div className="max-w-3xl w-full">
                     {/* Progress Header */}
-                    <div className="mb-8 text-center">
+                <div className="mb-8 text-center">
                         <h1 className="text-3xl font-bold mb-3" style={{ color: 'var(--color-text)' }}>
                             Your Flashcards
                         </h1>
@@ -268,9 +268,9 @@ export default function FlashcardsView() {
                                 />
                             </div>
                         </div>
-                    </div>
+                </div>
 
-                    {/* Flashcard */}
+                {/* Flashcard */}
                     <div 
                         className="relative mb-8"
                         style={{ perspective: '1000px' }}
@@ -330,7 +330,7 @@ export default function FlashcardsView() {
                                     backfaceVisibility: 'hidden',
                                 }}
                             >
-                                <div className="text-center">
+                    <div className="text-center">
                                     <p 
                                         className="text-sm mb-4 font-medium uppercase tracking-wide"
                                         style={{ color: 'var(--color-text-muted)' }}
@@ -351,8 +351,8 @@ export default function FlashcardsView() {
                                     </p>
                                 </div>
                             </div>
-                        </div>
                     </div>
+                </div>
 
                     {/* Card Controls */}
                     <div className="flex justify-between items-center gap-4 mb-6">
@@ -435,7 +435,7 @@ export default function FlashcardsView() {
                             <span>Next</span>
                             <span>→</span>
                         </button>
-                    </div>
+                </div>
 
                     {/* Keyboard Hints */}
                     <div className="text-center">

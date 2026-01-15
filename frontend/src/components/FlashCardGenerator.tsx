@@ -49,11 +49,19 @@ export default function FlashcardGenerator() {
                 throw new Error(data.detail || `Error: ${response.status}`);
             }
 
-            console.log('Generated deck:', data.deck_id);
-            console.log('Flashcards:', data.flashcards);
+            console.log('Generated flashcards:', data.flashcards);
+            console.log('Default title:', data.default_title);
             
-            // Navigate to preview screen instead of directly to flashcards
-            navigate(`/preview/${data.deck_id}`);
+            // Navigate to preview page with generated data
+            navigate('/deck-preview', {
+                state: {
+                    flashcards: data.flashcards,
+                    difficulty: data.difficulty,
+                    sourceText: data.source_text,
+                    defaultTitle: data.default_title,
+                    tempDeckId: data.deck_id
+                }
+            });
             
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -65,14 +73,14 @@ export default function FlashcardGenerator() {
     return (
         <div className="w-full max-w-2xl mx-auto">
             <form onSubmit={handleSubmit} className="space-y-6">
-                <TextArea
-                    label="Enter your text here"
-                    placeholder="Paste your article or notes here..."
-                    value={textContent}
-                    onChange={setTextContent}
+                        <TextArea
+                            label="Enter your text here"
+                            placeholder="Paste your article or notes here..."
+                            value={textContent}
+                            onChange={setTextContent}
                     rows={12}
-                />
-
+                        />
+                    
                 <div className="flex items-center gap-4">
                     <label 
                         htmlFor="difficulty-select"
@@ -118,7 +126,7 @@ export default function FlashcardGenerator() {
                         }
                     }}
                 >
-                    {loading ? 'Generating...' : 'Generate Flashcards'}
+                    {loading ? 'Generating Preview...' : 'Generate Preview'}
                 </button>
             </form>
 

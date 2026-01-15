@@ -3,6 +3,7 @@ import { ProtectedRoute } from './auth/ProtectedRoute'
 import Home from './pages/Home'
 import FlashcardsView from './pages/FlashcardsView'
 import GeneratedDeckPreview from './pages/GeneratedDeckPreview'
+import DeckPreview from './pages/DeckPreview'
 import MyWords from './pages/MyWords'
 import MyDecks from './pages/MyDecks'
 import ConversationPractice from './pages/ConversationPractice'
@@ -22,6 +23,7 @@ function App() {
 
             {/* Cannot access until logged in */}
             <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            <Route path="/deck-preview" element={<ProtectedRoute><DeckPreview /></ProtectedRoute>} />
             <Route path="/preview/:deckId" element={<ProtectedRoute><GeneratedDeckPreview /></ProtectedRoute>} />
             <Route path="/flashcards/:deckId" element={<ProtectedRoute><FlashcardsView /></ProtectedRoute>} />
             <Route path="/practice/conversation/:deckId/settings" element={<ProtectedRoute><ConversationSettings /></ProtectedRoute>} />
