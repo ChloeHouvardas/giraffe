@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import VocabWord from '../components/VocabWord';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -22,9 +23,17 @@ interface DeckData {
     difficulty: string;
 }
 
+interface ConversationSettings {
+    immersionLevel: number;
+    focusMode: 'deck-focused' | 'natural';
+    topic: string;
+    sessionLength: string;
+}
+
 export default function ConversationPractice() {
     const { deckId } = useParams<{ deckId: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useAuth();
     const [deckData, setDeckData] = useState<DeckData | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -35,8 +44,35 @@ export default function ConversationPractice() {
     const [allWordsUsed, setAllWordsUsed] = useState<Set<string>>(new Set());
     const [startTime] = useState<Date>(new Date());
     const [showSummary, setShowSummary] = useState(false);
+    const [settings, setSettings] = useState<ConversationSettings | null>(null);
+    const [tooltip, setTooltip] = useState<{ word: string; definition: string; x: number; y: number } | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Get settings from location state or localStorage
+    useEffect(() => {
+        // Try to get settings from location state
+        const state = location.state as any;
+        if (state?.settings) {
+            setSettings(state.settings);
+        } else {
+            // Try to load from localStorage
+            const saved = localStorage.getItem('conversationSettings');
+            if (saved) {
+                try {
+                    setSettings(JSON.parse(saved));
+                } catch (e) {
+                    // Invalid saved settings, redirect to settings
+                    navigate(`/practice/conversation/${deckId}/settings`, { replace: true });
+                    return;
+                }
+            } else {
+                // No settings, redirect to settings page
+                navigate(`/practice/conversation/${deckId}/settings`, { replace: true });
+                return;
+            }
+        }
+    }, [deckId, navigate, location]);
 
     // Fetch deck data
     useEffect(() => {
@@ -60,7 +96,7 @@ export default function ConversationPractice() {
 
     // Start conversation with AI greeting
     useEffect(() => {
-        if (!loading && deckData && messages.length === 0 && user) {
+        if (!loading && deckData && messages.length === 0 && user && settings) {
             const startConv = async () => {
                 setSending(true);
                 try {
@@ -70,7 +106,7 @@ export default function ConversationPractice() {
                         content: "Hello! I'm ready to practice my vocabulary."
                     };
 
-                    console.log("Starting conversation with initial message:", initialUserMessage);
+                    console.log("Starting conversation with settings:", settings);
                     
                     const response = await fetch('http://localhost:8000/api/practice/conversation', {
                         method: 'POST',
@@ -79,7 +115,8 @@ export default function ConversationPractice() {
                             deck_id: deckId,
                             user_id: user.id,
                             messages: [initialUserMessage],
-                            is_first_message: true
+                            is_first_message: true,
+                            settings: settings
                         })
                     });
 
@@ -115,7 +152,7 @@ export default function ConversationPractice() {
             };
             startConv();
         }
-    }, [loading, deckData, user, deckId]);
+    }, [loading, deckData, user, deckId, settings]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -163,7 +200,8 @@ export default function ConversationPractice() {
                     deck_id: deckId,
                     user_id: user.id,
                     messages: apiMessages,
-                    is_first_message: false
+                    is_first_message: false,
+                    settings: settings
                 })
             });
 
@@ -212,57 +250,61 @@ export default function ConversationPractice() {
         setShowSummary(true);
     };
 
-    const highlightWords = (text: string, words: string[] = []): React.ReactNode[] => {
-        if (!deckData || words.length === 0) return [text];
+    const parseMessageWithTags = (text: string): React.ReactNode[] => {
+        if (!deckData) return [text];
 
         const parts: React.ReactNode[] = [];
         let lastIndex = 0;
-        const textLower = text.toLowerCase();
-        const wordsLower = words.map(w => w.toLowerCase());
 
-        // Find all word positions
-        const matches: Array<{ word: string; start: number; end: number }> = [];
-        wordsLower.forEach((wordLower, idx) => {
-            let searchIndex = 0;
-            while (true) {
-                const index = textLower.indexOf(wordLower, searchIndex);
-                if (index === -1) break;
-                matches.push({
-                    word: words[idx],
-                    start: index,
-                    end: index + wordLower.length
-                });
-                searchIndex = index + 1;
-            }
-        });
+        // Regex to find <vocab>word</vocab> and <unknown>word</unknown> tags
+        const vocabRegex = /<vocab>(.*?)<\/vocab>/gi;
+        const unknownRegex = /<unknown>(.*?)<\/unknown>/gi;
 
-        // Sort matches by position
+        const matches: Array<{ type: 'vocab' | 'unknown'; word: string; start: number; end: number }> = [];
+
+        // Find vocab tags
+        let match;
+        while ((match = vocabRegex.exec(text)) !== null) {
+            matches.push({
+                type: 'vocab',
+                word: match[1],
+                start: match.index,
+                end: match.index + match[0].length
+            });
+        }
+
+        // Find unknown tags
+        while ((match = unknownRegex.exec(text)) !== null) {
+            matches.push({
+                type: 'unknown',
+                word: match[1],
+                start: match.index,
+                end: match.index + match[0].length
+            });
+        }
+
+        // Sort by position
         matches.sort((a, b) => a.start - b.start);
 
-        // Build highlighted text
+        // Build parts
         matches.forEach((match, idx) => {
             // Add text before match
             if (match.start > lastIndex) {
                 parts.push(text.substring(lastIndex, match.start));
             }
 
-            // Add highlighted word
+            // Find word definition
             const wordDef = deckData.flashcards.find(f => f.front.toLowerCase() === match.word.toLowerCase());
+
+            // Add highlighted word
             parts.push(
-                <span
+                <VocabWord
                     key={`word-${idx}`}
-                    className="highlighted-word"
-                    style={{
-                        backgroundColor: 'rgba(139, 64, 73, 0.2)',
-                        padding: '2px 4px',
-                        borderRadius: '4px',
-                        cursor: 'help',
-                        borderBottom: '1px dotted var(--color-primary)',
-                    }}
-                    title={wordDef ? wordDef.back : match.word}
-                >
-                    {text.substring(match.start, match.end)}
-                </span>
+                    word={match.word}
+                    definition={wordDef?.back || match.word}
+                    type={match.type}
+                    onExplain={(word) => askForExplanation(word)}
+                />
             );
 
             lastIndex = match.end;
@@ -274,6 +316,68 @@ export default function ConversationPractice() {
         }
 
         return parts.length > 0 ? parts : [text];
+    };
+
+    const askForExplanation = async (word: string) => {
+        if (!user || !deckData) return;
+
+        setTooltip(null);
+        
+        const wordDef = deckData.flashcards.find(f => f.front.toLowerCase() === word.toLowerCase());
+        const explanationMessage = `Can you explain the word "${word}" in more detail? How would I use it in different contexts?${wordDef ? ` (Definition: ${wordDef.back})` : ''}`;
+
+        const userMessage: Message = {
+            role: 'user',
+            content: explanationMessage,
+            timestamp: new Date()
+        };
+
+        const newMessages = [...messages, userMessage];
+        setMessages(newMessages);
+        setInputValue('');
+        setSending(true);
+        setError(null);
+
+        try {
+            const apiMessages = newMessages.map(m => ({
+                role: m.role,
+                content: m.content
+            }));
+
+            const response = await fetch('http://localhost:8000/api/practice/conversation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    deck_id: deckId,
+                    user_id: user.id,
+                    messages: apiMessages,
+                    is_first_message: false,
+                    settings: settings
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to send message');
+            }
+
+            const data = await response.json();
+            const aiMessage: Message = {
+                role: 'assistant',
+                content: data.message,
+                wordsUsed: data.words_used || [],
+                timestamp: new Date()
+            };
+
+            setMessages([...newMessages, aiMessage]);
+            updateWordsUsed(data.words_used || []);
+        } catch (err) {
+            console.error("Error asking for explanation:", err);
+            setError(err instanceof Error ? err.message : 'Failed to send message');
+        } finally {
+            setSending(false);
+            inputRef.current?.focus();
+        }
     };
 
     const getElapsedTime = () => {
@@ -418,19 +522,38 @@ export default function ConversationPractice() {
                         </h1>
                         <p className="text-sm" style={{ color: 'var(--color-text-subdued)' }}>
                             {deckData?.title} • {allWordsUsed.size}/{deckData?.count || 0} words • {getElapsedTime()}
+                            {settings && (
+                                <> • {settings.focusMode === 'deck-focused' ? 'Deck focused' : 'Natural'} • {
+                                    settings.immersionLevel <= 33 ? 'Minimal' :
+                                    settings.immersionLevel <= 66 ? 'Partial' : 'Complete'
+                                } immersion</>
+                            )}
                         </p>
                     </div>
-                    <button
-                        onClick={handleEndPractice}
-                        className="px-4 py-2 rounded transition-all"
-                        style={{
-                            backgroundColor: 'var(--color-bg-tertiary)',
-                            border: '1px solid var(--color-border)',
-                            color: 'var(--color-text)',
-                        }}
-                    >
-                        End Practice
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => navigate(`/practice/conversation/${deckId}/settings`)}
+                            className="px-4 py-2 rounded transition-all text-sm"
+                            style={{
+                                backgroundColor: 'var(--color-bg-tertiary)',
+                                border: '1px solid var(--color-border)',
+                                color: 'var(--color-text)',
+                            }}
+                        >
+                            ⚙️ Settings
+                        </button>
+                        <button
+                            onClick={handleEndPractice}
+                            className="px-4 py-2 rounded transition-all"
+                            style={{
+                                backgroundColor: 'var(--color-bg-tertiary)',
+                                border: '1px solid var(--color-border)',
+                                color: 'var(--color-text)',
+                            }}
+                        >
+                            End Practice
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -457,15 +580,10 @@ export default function ConversationPractice() {
                                 }}
                             >
                                 <div style={{ wordBreak: 'break-word' }}>
-                                    {message.role === 'assistant' && message.wordsUsed
-                                        ? highlightWords(message.content, message.wordsUsed)
+                                    {message.role === 'assistant'
+                                        ? parseMessageWithTags(message.content)
                                         : message.content}
                                 </div>
-                                {message.role === 'assistant' && message.wordsUsed && message.wordsUsed.length > 0 && (
-                                    <p className="text-xs mt-2 opacity-70">
-                                        Words used: {message.wordsUsed.join(', ')}
-                                    </p>
-                                )}
                             </div>
                         </div>
                     ))}

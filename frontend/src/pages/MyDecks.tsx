@@ -351,7 +351,7 @@ export default function MyDecks() {
                                         Practice
                                     </button>
                                     <button
-                                        onClick={() => navigate(`/practice/conversation/${deck.id}`)}
+                                        onClick={() => navigate(`/practice/conversation/${deck.id}/settings`)}
                                         className="w-full px-4 py-2 rounded transition-all font-medium"
                                         style={{
                                             backgroundColor: 'var(--color-info)',

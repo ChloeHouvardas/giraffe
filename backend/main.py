@@ -702,11 +702,18 @@ class ConversationMessage(BaseModel):
     role: str  # "user" or "assistant"
     content: str
 
+class ConversationSettings(BaseModel):
+    immersionLevel: int = 50  # 0-100
+    focusMode: str = "deck-focused"  # "deck-focused" or "natural"
+    topic: str = "general"
+    sessionLength: str = "standard"
+
 class ConversationRequest(BaseModel):
     deck_id: str
     user_id: str
     messages: list[ConversationMessage]
     is_first_message: bool = False
+    settings: ConversationSettings | None = None
 
 class ConversationResponse(BaseModel):
     message: str
@@ -752,22 +759,67 @@ async def practice_conversation(
         
         # Build vocabulary list
         vocabulary_words = [{"word": f.front, "definition": f.back} for f in flashcards]
-        words_list = "\n".join([f"- {w['word']} ({w['definition']})" for w in vocabulary_words])
+        words_list = "\n".join([f"- {w['word']}: {w['definition']}" for w in vocabulary_words])
         
-        # Create system prompt
+        # Get settings or use defaults
+        settings = request.settings or ConversationSettings()
+        immersion_level = settings.immersionLevel
+        focus_mode = settings.focusMode
+        topic = settings.topic
+        
+        # Determine immersion instructions
+        if immersion_level <= 33:
+            immersion_instructions = "Use mostly English with occasional target language words. Provide immediate translations. Keep sentences simple."
+        elif immersion_level <= 66:
+            immersion_instructions = "Use a 50/50 mix of English and target language. Use target language for vocabulary words and common phrases. Provide context clues."
+        else:
+            immersion_instructions = "Respond ENTIRELY in target language. Use natural, native-level language. Only provide English if the user explicitly asks."
+        
+        # Determine focus instructions
+        if focus_mode == "deck-focused":
+            focus_instructions = "CRITICAL: You MUST use words from this deck in nearly every response. Try to use 3-5 deck words per message. The conversation should revolve around practicing these specific words."
+        else:
+            focus_instructions = "Use deck words naturally when appropriate, but prioritize natural conversation flow."
+        
+        # Topic mapping
+        topic_descriptions = {
+            "general": "General conversation",
+            "travel": "Travel & tourism",
+            "business": "Business & work",
+            "daily": "Daily life & hobbies",
+            "food": "Food & dining",
+            "news": "News & current events",
+        }
+        topic_text = topic_descriptions.get(topic, topic) if topic != "custom" else "a topic chosen by the user"
+        
+        # Create enhanced system prompt
         system_prompt = f"""You are a friendly and encouraging language tutor helping a student practice vocabulary words.
 
 VOCABULARY WORDS TO PRACTICE:
 {words_list}
 
+IMMERSION LEVEL:
+{immersion_instructions}
+
+CONVERSATION FOCUS:
+{focus_instructions}
+
+CONVERSATION TOPIC: {topic_text}
+
 YOUR ROLE:
 - Have a natural, engaging conversation with the student
-- Naturally incorporate 3-5 vocabulary words from the list in each response
-- Use the words in context so the student can understand their meaning
-- Ask questions that encourage the student to use these words
-- Gently correct any mistakes and explain the right usage
+- {focus_instructions}
+- Gently correct mistakes and explain why
+- Ask questions that encourage the student to use vocabulary words
 - Be encouraging and supportive
-- Adapt your language complexity based on the student's responses
+- Adapt complexity based on student responses
+
+FORMATTING RULES:
+- When you use a deck vocabulary word, wrap it in <vocab>word</vocab> tags
+- Example: "That's a very <vocab>beneficial</vocab> approach!"
+- When using words that might be challenging for a language learner, wrap them in <unknown>word</unknown> tags
+- Example: "We should <unknown>procrastinate</unknown> less."
+- This helps the student identify which words they're practicing
 
 CONVERSATION STYLE:
 - Keep responses conversational (2-4 sentences)
