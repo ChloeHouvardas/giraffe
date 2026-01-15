@@ -10,7 +10,7 @@ interface VocabWordProps {
 export default function VocabWord({ word, definition, type, onExplain }: VocabWordProps) {
     const [tooltipVisible, setTooltipVisible] = useState(false);
     const [isHovering, setIsHovering] = useState(false);
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const containerRef = useRef<HTMLSpanElement>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
 
