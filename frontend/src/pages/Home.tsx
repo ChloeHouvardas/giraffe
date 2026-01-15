@@ -34,6 +34,25 @@ export default function Home() {
                 >
                     My Words
                 </Link>
+                <Link
+                    to="/my-decks"
+                    className="px-6 py-3 rounded transition-all"
+                    style={{
+                        backgroundColor: 'var(--color-bg-secondary)',
+                        border: '1px solid var(--color-border)',
+                        color: 'var(--color-text)',
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--color-bg-tertiary)'
+                        e.currentTarget.style.borderColor = 'var(--color-primary)'
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)'
+                        e.currentTarget.style.borderColor = 'var(--color-border)'
+                    }}
+                >
+                    My Decks
+                </Link>
                 <button
                     onClick={handleLogout}
                     className="px-6 py-3 rounded transition-all"

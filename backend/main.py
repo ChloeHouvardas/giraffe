@@ -189,6 +189,68 @@ def parse_flashcards(ai_response: str) -> list[dict]:
     return json.loads(ai_response)
 
 
+@app.get("/api/my-decks")
+async def get_my_decks(
+    user_id: str = Query(..., description="User ID"),
+    search: str = Query(default="", description="Search query"),
+    sort_by: str = Query(default="created_at", description="Sort by: created_at, title, count"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all decks for a specific user"""
+    try:
+        from sqlalchemy import select, func, desc, asc
+        
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        
+        # First, get all decks for the user
+        decks_query = select(Deck).where(Deck.user_id == user_uuid)
+        
+        # Add search filter if provided
+        if search:
+            decks_query = decks_query.where(Deck.title.ilike(f"%{search}%"))
+        
+        # Apply sorting for decks
+        if sort_by == "title":
+            decks_query = decks_query.order_by(asc(Deck.title))
+        else:  # created_at (default)
+            decks_query = decks_query.order_by(desc(Deck.created_at))
+        
+        decks_result = await db.execute(decks_query)
+        decks = decks_result.scalars().all()
+        
+        # Get card counts for each deck
+        deck_list = []
+        for deck in decks:
+            # Count flashcards for this deck
+            count_result = await db.execute(
+                select(func.count(Flashcard.id)).where(Flashcard.deck_id == deck.id)
+            )
+            card_count = count_result.scalar() or 0
+            
+            deck_list.append({
+                "id": str(deck.id),
+                "title": deck.title or "Untitled Deck",
+                "card_count": card_count,
+                "difficulty": deck.difficulty,
+                "created_at": deck.created_at.isoformat()
+            })
+        
+        # Sort by count if needed (after getting counts)
+        if sort_by == "count":
+            deck_list.sort(key=lambda x: x["card_count"], reverse=True)
+        
+        return deck_list
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching decks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/decks/{deck_id}")
 async def get_deck(
     deck_id: str,
@@ -235,6 +297,93 @@ async def get_deck(
         raise
     except Exception as e:
         print(f"Error fetching deck: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DeckUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=200)
+
+@app.put("/api/decks/{deck_id}")
+async def update_deck(
+    deck_id: str,
+    deck_data: DeckUpdate,
+    user_id: str = Query(..., description="User ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a deck"""
+    try:
+        from sqlalchemy import select
+        
+        # Convert IDs to UUID
+        try:
+            deck_uuid = uuid.UUID(deck_id)
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+        
+        # Get deck
+        result = await db.execute(
+            select(Deck).where(Deck.id == deck_uuid, Deck.user_id == user_uuid)
+        )
+        deck = result.scalar_one_or_none()
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        # Update fields if provided
+        if deck_data.title is not None:
+            deck.title = deck_data.title
+        
+        await db.commit()
+        await db.refresh(deck)
+        
+        return {
+            "id": str(deck.id),
+            "title": deck.title,
+            "difficulty": deck.difficulty,
+            "created_at": deck.created_at.isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating deck: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/decks/{deck_id}")
+async def delete_deck(
+    deck_id: str,
+    user_id: str = Query(..., description="User ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a deck"""
+    try:
+        from sqlalchemy import select
+        
+        # Convert IDs to UUID
+        try:
+            deck_uuid = uuid.UUID(deck_id)
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+        
+        # Get deck
+        result = await db.execute(
+            select(Deck).where(Deck.id == deck_uuid, Deck.user_id == user_uuid)
+        )
+        deck = result.scalar_one_or_none()
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        await db.delete(deck)
+        await db.commit()
+        
+        return {"message": "Deck deleted successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting deck: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Words API endpoints

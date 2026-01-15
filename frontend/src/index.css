@@ -90,3 +90,9 @@
   color: var(--color-text);
   letter-spacing: -0.02em;
 }
+
+/* Flashcard flip animation */
+.backface-hidden {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}

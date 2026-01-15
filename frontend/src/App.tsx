@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import FlashcardsView from './pages/FlashcardsView'
 import GeneratedDeckPreview from './pages/GeneratedDeckPreview'
 import MyWords from './pages/MyWords'
+import MyDecks from './pages/MyDecks'
 import Login from './pages/Login'
 import Register from './pages/Register'
 
@@ -22,6 +23,7 @@ function App() {
             <Route path="/preview/:deckId" element={<ProtectedRoute><GeneratedDeckPreview /></ProtectedRoute>} />
             <Route path="/flashcards/:deckId" element={<ProtectedRoute><FlashcardsView /></ProtectedRoute>} />
             <Route path="/my-words" element={<ProtectedRoute><MyWords /></ProtectedRoute>} />
+            <Route path="/my-decks" element={<ProtectedRoute><MyDecks /></ProtectedRoute>} />
           </Routes>
         </main>
       </div>
