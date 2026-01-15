@@ -22,6 +22,23 @@ from src.models import Deck, Flashcard, Word, PracticeSession, UserSetting
 
 app = FastAPI()
 
+# CORS - Must be added BEFORE any routes
+# Allow all localhost ports for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 print("="*80)
 print("DATABASE URL CHECK:")
 database_url = os.getenv("DATABASE_URL")
@@ -59,16 +76,6 @@ async def test_db(db: AsyncSession = Depends(get_db)):
 @app.get("/items/{item_id}")
 def read_item(item_id:int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
-
-# CORS
-app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
-
-)
 
 class TextInput(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
