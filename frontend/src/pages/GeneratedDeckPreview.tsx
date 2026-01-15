@@ -58,7 +58,7 @@ export default function GeneratedDeckPreview() {
             setDeckData(data);
             
             // Initialize selected words to all words
-            const allIndices = new Set(data.flashcards.map((_: any, index: number) => index));
+            const allIndices = new Set<number>(data.flashcards.map((_flashcard: Flashcard, index: number) => index));
             setSelectedWords(allIndices);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load deck');
@@ -142,7 +142,7 @@ export default function GeneratedDeckPreview() {
             }
 
             return { success: result.saved > 0 };
-        } catch (err) {
+        } catch {
             addToast('Error saving words', 'error');
             return { success: false };
         }
@@ -157,7 +157,7 @@ export default function GeneratedDeckPreview() {
         try {
             // Save words if option is selected
             if (saveAllWords && selectedWords.size > 0) {
-                const result = await saveWords();
+                await saveWords();
                 // Continue even if some words failed to save
             }
 
@@ -339,14 +339,15 @@ export default function GeneratedDeckPreview() {
                             >
                                 {saveAllWords && (
                                     <div className="mb-2">
+                                        <label htmlFor={`word-checkbox-${index}`} className="sr-only">
+                                            Select word {index + 1}
+                                        </label>
                                         <input
+                                            id={`word-checkbox-${index}`}
                                             type="checkbox"
                                             checked={selectedWords.has(index)}
                                             onChange={() => toggleWordSelection(index)}
-                                            className="w-4 h-4 rounded"
-                                            style={{
-                                                accentColor: 'var(--color-primary)',
-                                            }}
+                                            className="w-4 h-4 rounded checkbox-primary"
                                         />
                                     </div>
                                 )}

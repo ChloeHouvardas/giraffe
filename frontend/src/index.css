@@ -96,3 +96,8 @@
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
+
+/* Checkbox accent color */
+.checkbox-primary {
+  accent-color: var(--color-primary);
+}

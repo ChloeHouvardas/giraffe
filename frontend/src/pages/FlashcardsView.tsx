@@ -23,7 +23,6 @@ export default function FlashcardsView() {
     const [error, setError] = useState<string | null>(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [flipped, setFlipped] = useState(false);
-    const [isFlipping, setIsFlipping] = useState(false);
 
     // Fetch deck from database on mount
     useEffect(() => {
@@ -71,11 +70,7 @@ export default function FlashcardsView() {
     };
 
     const handleFlip = () => {
-        setIsFlipping(true);
-        setTimeout(() => {
-            setFlipped(!flipped);
-            setIsFlipping(false);
-        }, 150);
+        setFlipped(!flipped);
     };
 
     // Keyboard navigation
@@ -97,11 +92,7 @@ export default function FlashcardsView() {
                 case ' ':
                 case 'Enter':
                     e.preventDefault();
-                    setIsFlipping(true);
-                    setTimeout(() => {
-                        setFlipped((prev) => !prev);
-                        setIsFlipping(false);
-                    }, 150);
+                    setFlipped((prev) => !prev);
                     break;
             }
         };

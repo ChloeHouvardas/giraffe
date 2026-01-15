@@ -217,7 +217,9 @@ export default function MyDecks() {
 
                 {/* Search and Sort */}
                 <div className="flex flex-col md:flex-row gap-4 mb-6">
+                    <label htmlFor="search-decks" className="sr-only">Search decks</label>
                     <input
+                        id="search-decks"
                         type="text"
                         placeholder="Search decks..."
                         value={searchQuery}
@@ -231,7 +233,9 @@ export default function MyDecks() {
                             color: 'var(--color-text)',
                         }}
                     />
+                    <label htmlFor="sort-decks" className="sr-only">Sort decks</label>
                     <select
+                        id="sort-decks"
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
                         className="px-4 py-3 rounded transition-all"
@@ -432,10 +436,11 @@ export default function MyDecks() {
                             Edit Deck
                         </h2>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
+                            <label htmlFor="edit-deck-title" className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
                                 Deck Name
                             </label>
                             <input
+                                id="edit-deck-title"
                                 type="text"
                                 value={editTitle}
                                 onChange={(e) => setEditTitle(e.target.value)}

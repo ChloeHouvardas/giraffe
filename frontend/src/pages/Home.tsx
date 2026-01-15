@@ -13,7 +13,7 @@ export default function Home() {
     }
 
     return (
-        <div className = "min-h-screen flex items-center justify-center p-6">
+        <div className="min-h-screen flex items-center justify-center p-8">
             <div className="absolute top-6 right-6 flex gap-3">
                 <Link
                     to="/my-words"
@@ -74,11 +74,11 @@ export default function Home() {
                 </button>
             </div>
 
-            <div className="text-center">
-                <h1 className="text-display text-text mb-4">
+            <div className="text-center w-full max-w-4xl mx-auto px-4">
+                <h1 className="text-display mb-4" style={{ color: 'var(--color-text)' }}>
                     Welcome to Giraffe!
                 </h1>
-                <p className="text-lg text-text-subdued">
+                <p className="text-lg mb-12" style={{ color: 'var(--color-text-subdued)' }}>
                     Let's get learning
                 </p>
 
