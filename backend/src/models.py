@@ -52,3 +52,31 @@ class Word(Base):
     
     def __repr__(self):
         return f"<Word {self.id}: {self.word}>"
+
+class PracticeSession(Base):
+    __tablename__ = "practice_sessions"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.id", ondelete="SET NULL"), nullable=True)
+    practice_type = Column(String, nullable=False, default="flashcard")  # "flashcard" or "conversation"
+    duration_seconds = Column(Integer, nullable=False)  # Total practice time in seconds
+    completed_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    # Relationship to deck
+    deck = relationship("Deck")
+    
+    def __repr__(self):
+        return f"<PracticeSession {self.id}: {self.practice_type} {self.duration_seconds}s>"
+
+class UserSetting(Base):
+    __tablename__ = "user_settings"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, unique=True)
+    daily_goal_minutes = Column(Integer, default=15, nullable=False)  # Default 15 minutes
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<UserSetting {self.id}: {self.daily_goal_minutes}min/day>"

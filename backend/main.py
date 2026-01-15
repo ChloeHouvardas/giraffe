@@ -1,11 +1,12 @@
 from typing import Union, Optional
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from anthropic import Anthropic
 import os
 from dotenv import load_dotenv
 import json
+import io
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from src.database import get_db
-from src.models import Deck, Flashcard, Word
+from src.models import Deck, Flashcard, Word, PracticeSession, UserSetting
 
 app = FastAPI()
 
@@ -75,30 +76,18 @@ class TextInput(BaseModel):
     user_id: str 
 
 class FlashcardResponse(BaseModel):
-    deck_id: str              # Temporary ID for preview
+    deck_id: str              # ← Added
     flashcards: list[dict]
     count: int
-    difficulty: str
+    difficulty: str           # ← Added
     processing_time: float
-    source_text: str          # Source text for saving later
-    default_title: str        # Default title for preview
-
-class DeckCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    flashcards: list[dict] = Field(..., description="List of flashcards with 'front' and 'back' keys")
-    difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
-    source_text: Optional[str] = Field(None, max_length=500)
-    user_id: str
-
-class DeckUpdate(BaseModel):
-    title: Optional[str] = Field(None, max_length=200)
 
 @app.post("/api/generate-flashcards", response_model=FlashcardResponse)
 async def generate_flashcards(
     input_data: TextInput,
-    db: AsyncSession = Depends(get_db)  # Keep for future use, but don't save yet
+    db: AsyncSession = Depends(get_db)  # Add database dependency
 ):
-    """Generate flashcards from text using AI (does NOT save to database)"""
+    """Generate flashcards from text using AI and save to database"""
     print(f"\n{'='*80}")
     print(f"📝 Generating flashcards:")
     print(f"   Text: {input_data.text[:100]}...")
@@ -143,22 +132,49 @@ async def generate_flashcards(
         flashcards_data = parse_flashcards(ai_response)
         print(f"✅ Parsed {len(flashcards_data)} flashcards")
         
-        # Generate a temporary ID for the preview (not saved to DB)
-        temp_deck_id = str(uuid.uuid4())
-        default_title = f"Deck from {input_data.text[:30]}..."
+        # NEW: Save to database
+        print(f"💾 Saving to database...")
+
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(input_data.user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
         
-        print(f"📋 Generated preview (not saved to database)")
+        # Create deck
+        deck = Deck(
+            id=uuid.uuid4(),
+            title=f"Deck from {input_data.text[:30]}...",
+            source_text=input_data.text[:500],
+            difficulty=input_data.difficulty,
+            user_id=user_uuid 
+        )
+        db.add(deck)
+        await db.flush()  # Get the deck ID
+        
+        # Create flashcards
+        for card_data in flashcards_data:
+            flashcard = Flashcard(
+                deck_id=deck.id,
+                front=card_data["front"],
+                back=card_data["back"],
+                user_id=user_uuid
+            )
+            db.add(flashcard)
+        
+        await db.commit()
+        await db.refresh(deck)
+        
+        print(f"✅ Saved deck {deck.id} with {len(flashcards_data)} flashcards")
         print(f"{'='*80}\n")
         
-        # Return response with temporary deck_id (not saved)
+        # Return response with deck_id
         return {
-            "deck_id": temp_deck_id,
+            "deck_id": str(deck.id),
             "flashcards": flashcards_data,
             "count": len(flashcards_data),
             "difficulty": input_data.difficulty,
-            "processing_time": 1.5,
-            "source_text": input_data.text[:500],  # Include for saving later
-            "default_title": default_title  # Include default title
+            "processing_time": 1.5
         }
     
     except HTTPException:
@@ -236,58 +252,6 @@ async def get_my_decks(
         print(f"Error fetching decks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/decks", response_model=dict)
-async def create_deck(
-    deck_data: DeckCreate,
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a new deck with flashcards (called from preview page)"""
-    try:
-        # Convert user_id string to UUID
-        try:
-            user_uuid = uuid.UUID(deck_data.user_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid user_id format")
-        
-        # Create deck
-        deck = Deck(
-            id=uuid.uuid4(),
-            title=deck_data.title,
-            source_text=deck_data.source_text,
-            difficulty=deck_data.difficulty,
-            user_id=user_uuid 
-        )
-        db.add(deck)
-        await db.flush()  # Get the deck ID
-        
-        # Create flashcards
-        for card_data in deck_data.flashcards:
-            flashcard = Flashcard(
-                deck_id=deck.id,
-                front=card_data["front"],
-                back=card_data["back"],
-                user_id=user_uuid
-            )
-            db.add(flashcard)
-        
-        await db.commit()
-        await db.refresh(deck)
-        
-        print(f"✅ Created deck {deck.id} with {len(deck_data.flashcards)} flashcards")
-        
-        return {
-            "deck_id": str(deck.id),
-            "title": deck.title,
-            "count": len(deck_data.flashcards),
-            "difficulty": deck.difficulty
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error creating deck: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/api/decks/{deck_id}")
 async def get_deck(
     deck_id: str,
@@ -335,6 +299,9 @@ async def get_deck(
     except Exception as e:
         print(f"Error fetching deck: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class DeckUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=200)
 
 @app.put("/api/decks/{deck_id}")
 async def update_deck(
@@ -915,4 +882,310 @@ CONVERSATION STYLE:
         print(f"Error in conversation: {e}")
         import traceback
         print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Practice Session and Stats API endpoints
+
+class SessionCreate(BaseModel):
+    user_id: str
+    deck_id: Optional[str] = None
+    practice_type: str = Field(default="flashcard", pattern="^(flashcard|conversation)$", description="Type of practice: flashcard or conversation")
+    duration_seconds: int = Field(..., ge=1, description="Practice duration in seconds")
+
+class SessionResponse(BaseModel):
+    id: str
+    user_id: str
+    deck_id: str | None
+    practice_type: str
+    duration_seconds: int
+    completed_at: str
+
+@app.post("/api/sessions", response_model=SessionResponse)
+async def create_session(
+    session_data: SessionCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Save a practice session"""
+    try:
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(session_data.user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        
+        deck_uuid = None
+        if session_data.deck_id:
+            try:
+                deck_uuid = uuid.UUID(session_data.deck_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid deck_id format")
+        
+        # Create session
+        # IMPORTANT: duration_seconds must be in SECONDS, not minutes
+        # Frontend sends seconds, we store seconds directly
+        duration_seconds = session_data.duration_seconds
+        if duration_seconds < 1:
+            raise HTTPException(status_code=400, detail="Duration must be at least 1 second")
+        
+        # Log for debugging (can be removed in production)
+        print(f"Saving session: {duration_seconds} seconds ({duration_seconds / 60:.2f} minutes)")
+        
+        session = PracticeSession(
+            id=uuid.uuid4(),
+            user_id=user_uuid,
+            deck_id=deck_uuid,
+            practice_type=session_data.practice_type,
+            duration_seconds=duration_seconds  # Stored as SECONDS
+        )
+        
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+        
+        return {
+            "id": str(session.id),
+            "user_id": str(session.user_id),
+            "deck_id": str(session.deck_id) if session.deck_id else None,
+            "practice_type": session.practice_type,
+            "duration_seconds": session.duration_seconds,
+            "completed_at": session.completed_at.isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def calculate_stats_for_type(db: AsyncSession, user_uuid, start_of_day, practice_type: str):
+    """Helper function to calculate stats for a specific practice type"""
+    from sqlalchemy import select, func
+    
+    # Query sessions for this type
+    result = await db.execute(
+        select(func.sum(PracticeSession.duration_seconds))
+        .where(
+            PracticeSession.user_id == user_uuid,
+            PracticeSession.completed_at >= start_of_day,
+            PracticeSession.practice_type == practice_type
+        )
+    )
+    # Sum all duration_seconds (which are stored in SECONDS)
+    total_seconds = result.scalar() or 0
+    
+    # Convert to minutes for display (integer division)
+    # IMPORTANT: total_seconds is in SECONDS, we convert to minutes here
+    total_minutes = total_seconds // 60
+    
+    # Get session count
+    count_result = await db.execute(
+        select(func.count(PracticeSession.id))
+        .where(
+            PracticeSession.user_id == user_uuid,
+            PracticeSession.completed_at >= start_of_day,
+            PracticeSession.practice_type == practice_type
+        )
+    )
+    session_count = count_result.scalar() or 0
+    
+    return {
+        "total_minutes": total_minutes,
+        "total_seconds": total_seconds,
+        "session_count": session_count
+    }
+
+@app.get("/api/stats/daily")
+async def get_daily_stats(
+    user_id: str = Query(..., description="User ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get today's practice statistics (separated by session type)"""
+    try:
+        from sqlalchemy import select, func
+        from datetime import datetime, timezone
+        
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        
+        # Get start of today (UTC)
+        now = datetime.now(timezone.utc)
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Get stats for each session type
+        flashcard_stats = await calculate_stats_for_type(db, user_uuid, start_of_day, "flashcard")
+        conversation_stats = await calculate_stats_for_type(db, user_uuid, start_of_day, "conversation")
+        
+        # Calculate combined totals
+        total_minutes = flashcard_stats["total_minutes"] + conversation_stats["total_minutes"]
+        total_seconds = flashcard_stats["total_seconds"] + conversation_stats["total_seconds"]
+        total_session_count = flashcard_stats["session_count"] + conversation_stats["session_count"]
+        
+        # Get user's daily goal
+        settings_result = await db.execute(
+            select(UserSetting).where(UserSetting.user_id == user_uuid)
+        )
+        user_setting = settings_result.scalar_one_or_none()
+        daily_goal_minutes = user_setting.daily_goal_minutes if user_setting else 15
+        
+        return {
+            "flashcard": {
+                **flashcard_stats,
+                "progress_percentage": min(100, int((flashcard_stats["total_minutes"] / daily_goal_minutes) * 100)) if daily_goal_minutes > 0 else 0,
+                "goal_reached": flashcard_stats["total_minutes"] >= daily_goal_minutes
+            },
+            "conversation": {
+                **conversation_stats,
+                "progress_percentage": min(100, int((conversation_stats["total_minutes"] / daily_goal_minutes) * 100)) if daily_goal_minutes > 0 else 0,
+                "goal_reached": conversation_stats["total_minutes"] >= daily_goal_minutes
+            },
+            "combined": {
+                "total_minutes": total_minutes,
+                "total_seconds": total_seconds,
+                "session_count": total_session_count,
+                "daily_goal_minutes": daily_goal_minutes,
+                "progress_percentage": min(100, int((total_minutes / daily_goal_minutes) * 100)) if daily_goal_minutes > 0 else 0,
+                "goal_reached": total_minutes >= daily_goal_minutes
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching daily stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UserSettingUpdate(BaseModel):
+    daily_goal_minutes: int = Field(..., ge=1, le=480, description="Daily goal in minutes (1-480)")
+
+@app.get("/api/user-settings")
+async def get_user_settings(
+    user_id: str = Query(..., description="User ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user settings"""
+    try:
+        from sqlalchemy import select
+        
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        
+        result = await db.execute(
+            select(UserSetting).where(UserSetting.user_id == user_uuid)
+        )
+        user_setting = result.scalar_one_or_none()
+        
+        # If no settings exist, return defaults
+        if not user_setting:
+            return {
+                "daily_goal_minutes": 15,
+                "created_at": None,
+                "updated_at": None
+            }
+        
+        return {
+            "daily_goal_minutes": user_setting.daily_goal_minutes,
+            "created_at": user_setting.created_at.isoformat(),
+            "updated_at": user_setting.updated_at.isoformat() if user_setting.updated_at else None
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching user settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/user-settings")
+async def update_user_settings(
+    user_id: str = Query(..., description="User ID"),
+    settings_data: UserSettingUpdate = ...,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user settings"""
+    try:
+        from sqlalchemy import select
+        from datetime import datetime
+        
+        # Convert user_id string to UUID
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
+        
+        result = await db.execute(
+            select(UserSetting).where(UserSetting.user_id == user_uuid)
+        )
+        user_setting = result.scalar_one_or_none()
+        
+        if not user_setting:
+            # Create new settings
+            user_setting = UserSetting(
+                id=uuid.uuid4(),
+                user_id=user_uuid,
+                daily_goal_minutes=settings_data.daily_goal_minutes
+            )
+            db.add(user_setting)
+        else:
+            # Update existing settings
+            user_setting.daily_goal_minutes = settings_data.daily_goal_minutes
+            user_setting.updated_at = datetime.utcnow()
+        
+        await db.commit()
+        await db.refresh(user_setting)
+        
+        return {
+            "daily_goal_minutes": user_setting.daily_goal_minutes,
+            "created_at": user_setting.created_at.isoformat(),
+            "updated_at": user_setting.updated_at.isoformat() if user_setting.updated_at else None
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating user settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Speech-to-Text endpoint for Firefox
+@app.post("/api/speech-to-text")
+async def speech_to_text(audio: UploadFile = File(...)):
+    """
+    Convert audio to text using Web Speech API polyfill or external service.
+    For Firefox compatibility, this endpoint receives audio and returns transcription.
+    """
+    try:
+        # Read audio file
+        audio_bytes = await audio.read()
+        
+        # For now, return a placeholder response
+        # In production, you would:
+        # 1. Use Google Cloud Speech-to-Text API
+        # 2. Use Azure Speech Services
+        # 3. Use AWS Transcribe
+        # 4. Use a local speech recognition library
+        
+        # Placeholder: This would need to be replaced with actual speech recognition
+        # For now, we'll use a simple approach that works with browser's built-in capabilities
+        
+        # Note: For a production implementation, you would:
+        # - Save audio file temporarily
+        # - Call speech recognition API (Google Cloud, Azure, etc.)
+        # - Return transcription
+        
+        # Temporary solution: Return error suggesting to use Chrome/Edge
+        # Or implement with a service like Google Cloud Speech-to-Text
+        
+        raise HTTPException(
+            status_code=501, 
+            detail="Speech-to-text service not configured. Please use Chrome or Edge for voice input, or configure a speech recognition service in the backend."
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error processing speech-to-text: {e}")
         raise HTTPException(status_code=500, detail=str(e))

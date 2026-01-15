@@ -1,5 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../auth/useAuth';
 
 interface Flashcard {
     front: string;
@@ -17,12 +18,19 @@ interface DeckData {
 export default function FlashcardsView() {
     const { deckId } = useParams<{ deckId: string }>();
     const navigate = useNavigate();
+    const { user } = useAuth();
     
     const [deckData, setDeckData] = useState<DeckData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [flipped, setFlipped] = useState(false);
+    
+    // Session tracking
+    const [sessionSeconds, setSessionSeconds] = useState(0);
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const startTimeRef = useRef<number>(Date.now());
+    const pausedTimeRef = useRef<number>(0);
 
     // Fetch deck from database on mount
     useEffect(() => {
@@ -55,6 +63,71 @@ export default function FlashcardsView() {
 
         fetchDeck();
     }, [deckId]);
+
+    // Session timer logic
+    useEffect(() => {
+        if (!user || loading || !deckData) return;
+
+        // Start timer
+        startTimeRef.current = Date.now();
+
+        // Handle tab visibility (pause when tab is inactive)
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                // Tab is hidden, pause timer
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                pausedTimeRef.current += Date.now() - startTimeRef.current;
+            } else {
+                // Tab is visible, resume timer
+                startTimeRef.current = Date.now();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Update timer every second
+        intervalRef.current = setInterval(() => {
+            if (!document.hidden) {
+                const elapsed = Math.floor((Date.now() - startTimeRef.current + pausedTimeRef.current) / 1000);
+                setSessionSeconds(elapsed);
+            }
+        }, 1000);
+
+        // Save session when component unmounts
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+
+            // Save session
+            // IMPORTANT: Calculate duration in SECONDS
+            const totalSeconds = Math.floor((Date.now() - startTimeRef.current + pausedTimeRef.current) / 1000);
+            if (totalSeconds > 0 && user) {
+                // Save session asynchronously (don't block unmount)
+                // IMPORTANT: duration_seconds must be in SECONDS, not minutes
+                console.log(`Auto-saving flashcard session: ${totalSeconds} seconds (${(totalSeconds / 60).toFixed(2)} minutes)`);
+                fetch('http://localhost:8000/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: user.id,
+                        deck_id: deckId || null,
+                        practice_type: 'flashcard',
+                        duration_seconds: totalSeconds  // SECONDS, not minutes
+                    }),
+                }).catch(err => {
+                    console.error('Failed to save session:', err);
+                });
+            }
+        };
+    }, [user, loading, deckData, deckId]);
 
     // Handlers
     const handleNext = () => {
@@ -251,9 +324,19 @@ export default function FlashcardsView() {
                             Your Flashcards
                         </h1>
                         <div className="mb-2">
-                            <p className="text-lg font-medium mb-2" style={{ color: 'var(--color-text-subdued)' }}>
-                                Card {currentIndex + 1} of {flashcards.length} • {difficulty}
-                            </p>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-lg font-medium" style={{ color: 'var(--color-text-subdued)' }}>
+                                    Card {currentIndex + 1} of {flashcards.length} • {difficulty}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                        ⏱️
+                                    </span>
+                                    <span className="text-lg font-medium" style={{ color: 'var(--color-text-subdued)' }}>
+                                        {Math.floor(sessionSeconds / 60)}:{(sessionSeconds % 60).toString().padStart(2, '0')}
+                                    </span>
+                                </div>
+                            </div>
                             {/* Progress Bar */}
                             <div 
                                 className="w-full h-2 rounded-full overflow-hidden"

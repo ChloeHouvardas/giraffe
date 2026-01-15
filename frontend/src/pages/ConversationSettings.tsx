@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/useAuth';
 
 interface DeckData {
     deck_id: string;
@@ -20,7 +19,6 @@ interface ConversationSettings {
 export default function ConversationSettings() {
     const { deckId } = useParams<{ deckId: string }>();
     const navigate = useNavigate();
-    const { user } = useAuth();
     const [deckData, setDeckData] = useState<DeckData | null>(null);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState<ConversationSettings>({
@@ -46,7 +44,7 @@ export default function ConversationSettings() {
                     difficulty: data.difficulty,
                 });
                 setLoading(false);
-            } catch (err) {
+            } catch {
                 setLoading(false);
             }
         };
@@ -147,6 +145,8 @@ export default function ConversationSettings() {
                             value={settings.immersionLevel}
                             onChange={(e) => setSettings({ ...settings, immersionLevel: parseInt(e.target.value) })}
                             className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                            aria-label="Language immersion level"
+                            title="Language immersion level"
                             style={{
                                 background: `linear-gradient(to right, 
                                     var(--color-success) 0%, 
@@ -220,6 +220,8 @@ export default function ConversationSettings() {
                         value={settings.topic}
                         onChange={(e) => setSettings({ ...settings, topic: e.target.value })}
                         className="w-full px-4 py-3 rounded"
+                        aria-label="Conversation topic"
+                        title="Conversation topic"
                         style={{
                             backgroundColor: 'var(--color-bg-tertiary)',
                             border: '1px solid var(--color-border)',
@@ -256,8 +258,10 @@ export default function ConversationSettings() {
                     </label>
                     <select
                         value={settings.sessionLength}
-                        onChange={(e) => setSettings({ ...settings, sessionLength: e.target.value as any })}
+                        onChange={(e) => setSettings({ ...settings, sessionLength: e.target.value as 'quick' | 'standard' | 'extended' | 'unlimited' })}
                         className="w-full px-4 py-3 rounded"
+                        aria-label="Session length"
+                        title="Session length"
                         style={{
                             backgroundColor: 'var(--color-bg-tertiary)',
                             border: '1px solid var(--color-border)',

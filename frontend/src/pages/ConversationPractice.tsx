@@ -30,6 +30,31 @@ interface ConversationSettings {
     sessionLength: string;
 }
 
+interface SpeechRecognitionEvent {
+    resultIndex: number;
+    results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+    length: number;
+    [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+    isFinal: boolean;
+    [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+    transcript: string;
+    confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent {
+    error: string;
+    message?: string;
+}
+
 export default function ConversationPractice() {
     const { deckId } = useParams<{ deckId: string }>();
     const navigate = useNavigate();
@@ -42,17 +67,148 @@ export default function ConversationPractice() {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [allWordsUsed, setAllWordsUsed] = useState<Set<string>>(new Set());
-    const [startTime] = useState<Date>(new Date());
     const [showSummary, setShowSummary] = useState(false);
+    const [sessionSeconds, setSessionSeconds] = useState(0);
+    const [finalSessionSeconds, setFinalSessionSeconds] = useState<number | null>(null); // Store final duration for summary
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const startTimeRef = useRef<number>(Date.now());
+    const pausedTimeRef = useRef<number>(0);
     const [settings, setSettings] = useState<ConversationSettings | null>(null);
-    const [tooltip, setTooltip] = useState<{ word: string; definition: string; x: number; y: number } | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    
+    // Speech recognition state
+    const [isListening, setIsListening] = useState(false);
+    const [speechSupported, setSpeechSupported] = useState(false);
+    const [speechError, setSpeechError] = useState<string | null>(null);
+    interface SpeechRecognitionInstance {
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+        onstart: (() => void) | null;
+        onresult: ((event: SpeechRecognitionEvent) => void) | null;
+        onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+        onend: (() => void) | null;
+        start: () => void;
+        stop: () => void;
+    }
+    
+    const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+    const speechBaseValueRef = useRef<string>(''); // Store input value when speech starts
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const isFirefoxRef = useRef(false);
+    const streamRef = useRef<MediaStream | null>(null);
+    const [targetLanguage, setTargetLanguage] = useState<string>('fr-FR'); // Default to French
+    const conversationStartedRef = useRef<boolean>(false); // Prevent duplicate API calls
+
+    // Detect target language from deck or settings
+    useEffect(() => {
+        // Try to detect language from deck title or flashcards
+        // For now, default to French (fr-FR) - can be made configurable
+        // You could also detect from deck title, flashcards, or user settings
+        if (deckData?.title) {
+            // Simple heuristic: if title contains French words or is in French, use fr-FR
+            // Otherwise, you could add a language field to the deck
+            const title = deckData.title.toLowerCase();
+            if (title.includes('français') || title.includes('french')) {
+                setTargetLanguage('fr-FR');
+            } else {
+                // Default to French for this app
+                setTargetLanguage('fr-FR');
+            }
+        }
+    }, [deckData]);
+
+    // Check browser support for speech recognition
+    useEffect(() => {
+        // Detect Firefox
+        const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+        isFirefoxRef.current = isFirefox;
+        
+        interface WindowWithSpeechRecognition extends Window {
+            SpeechRecognition?: new () => SpeechRecognitionInstance;
+            webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+        }
+        
+        const SpeechRecognition = (window as WindowWithSpeechRecognition).SpeechRecognition || (window as WindowWithSpeechRecognition).webkitSpeechRecognition;
+        
+        if (SpeechRecognition) {
+            // Chrome/Edge/Safari - use Web Speech API
+            setSpeechSupported(true);
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            // Set language - default to French for this app
+            recognition.lang = targetLanguage || 'fr-FR';
+            
+            recognition.onstart = () => {
+                setIsListening(true);
+                setSpeechError(null);
+                speechBaseValueRef.current = inputRef.current?.value || '';
+            };
+            
+            recognition.onresult = (event: SpeechRecognitionEvent) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                const base = speechBaseValueRef.current;
+                if (finalTranscript) {
+                    setInputValue(base + finalTranscript.trim() + (interimTranscript ? ' ' + interimTranscript : ''));
+                    speechBaseValueRef.current = base + finalTranscript.trim() + ' ';
+                } else if (interimTranscript) {
+                    setInputValue(base + interimTranscript);
+                }
+            };
+            
+            recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+                console.error('Speech recognition error:', event.error);
+                setIsListening(false);
+                
+                if (event.error === 'no-speech') {
+                    setSpeechError('No speech detected. Try again.');
+                } else if (event.error === 'audio-capture') {
+                    setSpeechError('No microphone found. Please check your microphone.');
+                } else if (event.error === 'not-allowed') {
+                    setSpeechError('Microphone permission denied. Please enable microphone access.');
+                } else {
+                    setSpeechError(`Speech recognition error: ${event.error}`);
+                }
+                
+                setTimeout(() => setSpeechError(null), 3000);
+            };
+            
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+            
+            recognitionRef.current = recognition;
+        } else if (isFirefox && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+            // Firefox - check if it has experimental Web Speech API support
+            // If not, we'll use MediaRecorder as fallback (requires backend)
+            // Some Firefox versions have experimental support via about:config
+            setSpeechSupported(true);
+        } else {
+            setSpeechSupported(false);
+        }
+    }, [targetLanguage]); // Re-initialize when language changes
 
     // Get settings from location state or localStorage
     useEffect(() => {
         // Try to get settings from location state
-        const state = location.state as any;
+        interface LocationState {
+            settings?: ConversationSettings;
+        }
+        const state = location.state as LocationState | null;
         if (state?.settings) {
             setSettings(state.settings);
         } else {
@@ -61,7 +217,7 @@ export default function ConversationPractice() {
             if (saved) {
                 try {
                     setSettings(JSON.parse(saved));
-                } catch (e) {
+                } catch {
                     // Invalid saved settings, redirect to settings
                     navigate(`/practice/conversation/${deckId}/settings`, { replace: true });
                     return;
@@ -94,9 +250,96 @@ export default function ConversationPractice() {
         fetchDeck();
     }, [deckId]);
 
+    // Session timer logic
+    useEffect(() => {
+        if (!user || loading || !deckData || !settings) return;
+
+        // Start timer
+        startTimeRef.current = Date.now();
+
+        // Handle tab visibility (pause when tab is inactive)
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                // Tab is hidden, pause timer
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                pausedTimeRef.current += Date.now() - startTimeRef.current;
+            } else {
+                // Tab is visible, resume timer
+                startTimeRef.current = Date.now();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Update timer every second (only if summary not shown)
+        intervalRef.current = setInterval(() => {
+            if (!document.hidden && !showSummary) {
+                const elapsed = Math.floor((Date.now() - startTimeRef.current + pausedTimeRef.current) / 1000);
+                setSessionSeconds(elapsed);
+            }
+        }, 1000);
+
+        // Save session when component unmounts
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+
+            // Save session
+            // IMPORTANT: Calculate duration in SECONDS
+            const totalSeconds = Math.floor((Date.now() - startTimeRef.current + pausedTimeRef.current) / 1000);
+            if (totalSeconds > 0 && user && !showSummary) {
+                // Save session asynchronously (don't block unmount)
+                // IMPORTANT: duration_seconds must be in SECONDS, not minutes
+                console.log(`Auto-saving conversation session: ${totalSeconds} seconds (${(totalSeconds / 60).toFixed(2)} minutes)`);
+                fetch('http://localhost:8000/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: user.id,
+                        deck_id: deckId || null,
+                        practice_type: 'conversation',
+                        duration_seconds: totalSeconds  // SECONDS, not minutes
+                    }),
+                }).catch(err => {
+                    console.error('Failed to save session:', err);
+                });
+            }
+        };
+    }, [user, loading, deckData, settings, deckId, showSummary]); // showSummary dependency ensures timer stops when summary is shown
+
+    // Stop timer when summary is shown (additional safeguard)
+    useEffect(() => {
+        if (showSummary && intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    }, [showSummary]);
+
+    // Reset conversation started flag when deckId changes
+    useEffect(() => {
+        conversationStartedRef.current = false;
+    }, [deckId]);
+
     // Start conversation with AI greeting
     useEffect(() => {
+        // Prevent duplicate calls - check if conversation already started
+        if (conversationStartedRef.current) {
+            return;
+        }
+        
+        // Only start if all required data is loaded and no messages exist
         if (!loading && deckData && messages.length === 0 && user && settings) {
+            // Mark as started immediately to prevent duplicate calls
+            conversationStartedRef.current = true;
+            
             const startConv = async () => {
                 setSending(true);
                 try {
@@ -146,23 +389,42 @@ export default function ConversationPractice() {
                 } catch (err) {
                     console.error("Error starting conversation:", err);
                     setError(err instanceof Error ? err.message : 'Failed to start conversation');
+                    // Reset the ref on error so user can retry
+                    conversationStartedRef.current = false;
                 } finally {
                     setSending(false);
                 }
             };
             startConv();
         }
-    }, [loading, deckData, user, deckId, settings]);
+    }, [loading, deckData, user, deckId, settings, messages.length]);
 
     // Auto-scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // Focus input on mount
+    // Focus input on mount (but not when listening)
     useEffect(() => {
-        inputRef.current?.focus();
-    }, []);
+        if (!isListening) {
+            inputRef.current?.focus();
+        }
+    }, [isListening]);
+    
+    // Cleanup speech recognition on unmount
+    useEffect(() => {
+        return () => {
+            if (recognitionRef.current && isListening) {
+                recognitionRef.current.stop();
+            }
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [isListening]);
 
 
     const sendMessage = async () => {
@@ -246,7 +508,233 @@ export default function ConversationPractice() {
         }
     };
 
-    const handleEndPractice = () => {
+    const startFirefoxRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            streamRef.current = stream;
+            
+            // Try to use Web Speech API if available (some Firefox versions have experimental support)
+            interface WindowWithSpeechRecognition extends Window {
+            SpeechRecognition?: new () => SpeechRecognitionInstance;
+            webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+        }
+        
+        const SpeechRecognition = (window as WindowWithSpeechRecognition).SpeechRecognition || (window as WindowWithSpeechRecognition).webkitSpeechRecognition;
+            
+            if (SpeechRecognition) {
+                // Firefox with experimental Web Speech API support
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = true;
+                // Set language - default to French for this app
+                recognition.lang = targetLanguage || 'fr-FR';
+                
+                recognition.onstart = () => {
+                    setIsListening(true);
+                    setSpeechError(null);
+                    speechBaseValueRef.current = inputRef.current?.value || '';
+                };
+                
+                recognition.onresult = (event: SpeechRecognitionEvent) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+                    
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript + ' ';
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+                    
+                    const base = speechBaseValueRef.current;
+                    if (finalTranscript) {
+                        setInputValue(base + finalTranscript.trim() + (interimTranscript ? ' ' + interimTranscript : ''));
+                        speechBaseValueRef.current = base + finalTranscript.trim() + ' ';
+                    } else if (interimTranscript) {
+                        setInputValue(base + interimTranscript);
+                    }
+                };
+                
+                recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+                    console.error('Speech recognition error:', event.error);
+                    setIsListening(false);
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    if (event.error === 'not-allowed') {
+                        setSpeechError('Microphone permission denied. Please enable microphone access.');
+                    } else {
+                        setSpeechError(`Speech recognition error: ${event.error}`);
+                    }
+                    setTimeout(() => setSpeechError(null), 3000);
+                };
+                
+                recognition.onend = () => {
+                    setIsListening(false);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                recognitionRef.current = recognition;
+                recognition.start();
+            } else {
+                // Fallback: Use MediaRecorder and send to backend
+                const mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+                });
+                mediaRecorderRef.current = mediaRecorder;
+                audioChunksRef.current = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunksRef.current.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunksRef.current, { 
+                        type: mediaRecorder.mimeType 
+                    });
+                    
+                    // Send audio to backend for transcription
+                    try {
+                        const formData = new FormData();
+                        formData.append('audio', audioBlob, `recording.${mediaRecorder.mimeType.includes('webm') ? 'webm' : 'ogg'}`);
+                        
+                        const response = await fetch('http://localhost:8000/api/speech-to-text', {
+                            method: 'POST',
+                            body: formData,
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            const base = speechBaseValueRef.current;
+                            setInputValue(base + (base ? ' ' : '') + data.transcript);
+                        } else if (response.status === 501) {
+                            // Service not configured - show less intrusive message
+                            setSpeechError('Firefox voice input requires backend configuration. Please use Chrome or Edge for native voice input, or type your message.');
+                            setTimeout(() => setSpeechError(null), 4000);
+                        } else {
+                            throw new Error('Transcription failed');
+                        }
+                    } catch (err) {
+                        console.error('Error transcribing audio:', err);
+                        setSpeechError('Voice input unavailable in Firefox. Please use Chrome/Edge for voice input or type your message.');
+                        setTimeout(() => setSpeechError(null), 4000);
+                    }
+                    
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.start();
+                setIsListening(true);
+                setSpeechError(null);
+                speechBaseValueRef.current = inputRef.current?.value || '';
+            }
+        } catch (err) {
+            console.error('Error accessing microphone:', err);
+            setIsListening(false);
+            const error = err as DOMException;
+            if (error.name === 'NotAllowedError') {
+                setSpeechError('Microphone permission denied. Please enable microphone access.');
+            } else if (error.name === 'NotFoundError') {
+                setSpeechError('No microphone found. Please check your microphone.');
+            } else {
+                setSpeechError('Failed to access microphone. Please try again.');
+            }
+            setTimeout(() => setSpeechError(null), 3000);
+        }
+    };
+    
+    const stopFirefoxRecording = () => {
+        if (recognitionRef.current && isListening) {
+            // If using Web Speech API
+            recognitionRef.current.stop();
+        } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            // If using MediaRecorder
+            mediaRecorderRef.current.stop();
+        }
+        
+        // Stop any active stream
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+        
+        setIsListening(false);
+    };
+    
+    const toggleListening = () => {
+        if (isFirefoxRef.current) {
+            // Firefox path
+            if (isListening) {
+                stopFirefoxRecording();
+            } else {
+                startFirefoxRecording();
+            }
+        } else {
+            // Chrome/Edge/Safari path
+            if (!recognitionRef.current) return;
+            
+            if (isListening) {
+                recognitionRef.current.stop();
+                setIsListening(false);
+            } else {
+                try {
+                    setSpeechError(null);
+                    recognitionRef.current.start();
+                } catch (err) {
+                    console.error('Error starting speech recognition:', err);
+                    setSpeechError('Failed to start microphone. Please try again.');
+                    setTimeout(() => setSpeechError(null), 3000);
+                }
+            }
+        }
+    };
+
+    const handleEndPractice = async () => {
+        // Stop the timer immediately
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+        
+        // Calculate final duration in SECONDS
+        // IMPORTANT: This is in SECONDS, not minutes
+        const finalDurationSeconds = Math.floor((Date.now() - startTimeRef.current + pausedTimeRef.current) / 1000);
+        
+        // Save final duration for summary display
+        setFinalSessionSeconds(finalDurationSeconds);
+        setSessionSeconds(finalDurationSeconds); // Also update current for consistency
+        
+        // Save session before showing summary
+        // IMPORTANT: duration_seconds must be in SECONDS
+        if (user && finalDurationSeconds > 0) {
+            try {
+                console.log(`Saving conversation session: ${finalDurationSeconds} seconds (${(finalDurationSeconds / 60).toFixed(2)} minutes)`);
+                await fetch('http://localhost:8000/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: user.id,
+                        deck_id: deckId || null,
+                        practice_type: 'conversation',
+                        duration_seconds: finalDurationSeconds  // SECONDS, not minutes
+                    }),
+                });
+            } catch (err) {
+                console.error('Failed to save session:', err);
+            }
+        }
         setShowSummary(true);
     };
 
@@ -321,7 +809,7 @@ export default function ConversationPractice() {
     const askForExplanation = async (word: string) => {
         if (!user || !deckData) return;
 
-        setTooltip(null);
+        // Tooltip handling removed - not currently used
         
         const wordDef = deckData.flashcards.find(f => f.front.toLowerCase() === word.toLowerCase());
         const explanationMessage = `Can you explain the word "${word}" in more detail? How would I use it in different contexts?${wordDef ? ` (Definition: ${wordDef.back})` : ''}`;
@@ -381,7 +869,8 @@ export default function ConversationPractice() {
     };
 
     const getElapsedTime = () => {
-        const elapsed = Math.floor((new Date().getTime() - startTime.getTime()) / 1000);
+        // Use final session seconds if available (summary mode), otherwise use current sessionSeconds
+        const elapsed = finalSessionSeconds !== null ? finalSessionSeconds : sessionSeconds;
         const minutes = Math.floor(elapsed / 60);
         const seconds = elapsed % 60;
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -520,15 +1009,25 @@ export default function ConversationPractice() {
                         <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--color-text)' }}>
                             Practice Conversation
                         </h1>
-                        <p className="text-sm" style={{ color: 'var(--color-text-subdued)' }}>
-                            {deckData?.title} • {allWordsUsed.size}/{deckData?.count || 0} words • {getElapsedTime()}
-                            {settings && (
-                                <> • {settings.focusMode === 'deck-focused' ? 'Deck focused' : 'Natural'} • {
-                                    settings.immersionLevel <= 33 ? 'Minimal' :
-                                    settings.immersionLevel <= 66 ? 'Partial' : 'Complete'
-                                } immersion</>
-                            )}
-                        </p>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                    ⏱️
+                                </span>
+                                <span className="text-sm font-medium" style={{ color: 'var(--color-text-subdued)' }}>
+                                    {Math.floor(sessionSeconds / 60)}:{(sessionSeconds % 60).toString().padStart(2, '0')}
+                                </span>
+                            </div>
+                            <p className="text-sm" style={{ color: 'var(--color-text-subdued)' }}>
+                                {deckData?.title} • {allWordsUsed.size}/{deckData?.count || 0} words
+                                {settings && (
+                                    <> • {settings.focusMode === 'deck-focused' ? 'Deck focused' : 'Natural'} • {
+                                        settings.immersionLevel <= 33 ? 'Minimal' :
+                                        settings.immersionLevel <= 66 ? 'Partial' : 'Complete'
+                                    } immersion</>
+                                )}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <button
@@ -628,33 +1127,103 @@ export default function ConversationPractice() {
 
             {/* Input */}
             <div className="sticky bottom-0 px-4 py-4 border-t" style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)' }}>
-                <div className="max-w-4xl mx-auto flex gap-3">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Type your message..."
-                        disabled={sending}
-                        className="flex-1 px-4 py-3 rounded transition-all"
-                        style={{
-                            backgroundColor: 'var(--color-bg-tertiary)',
-                            border: '1px solid var(--color-border)',
-                            color: 'var(--color-text)',
-                        }}
-                    />
-                    <button
-                        onClick={sendMessage}
-                        disabled={!inputValue.trim() || sending}
-                        className="px-6 py-3 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                            backgroundColor: 'var(--color-primary)',
-                            color: '#ffffff',
-                        }}
-                    >
-                        Send
-                    </button>
+                <div className="max-w-4xl mx-auto">
+                    {/* Speech Error Message */}
+                    {speechError && (
+                        <div className="mb-2 p-2 rounded text-sm text-center" style={{ backgroundColor: 'var(--color-critical)', color: '#ffffff' }}>
+                            {speechError}
+                        </div>
+                    )}
+                    
+                    {/* Listening Indicator */}
+                    {isListening && (
+                        <div className="mb-2 flex items-center justify-center gap-2">
+                            <div className="flex items-center gap-2 px-3 py-1 rounded" style={{ backgroundColor: 'var(--color-critical)', color: '#ffffff' }}>
+                                <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#ffffff' }}></div>
+                                <span className="text-sm font-medium">Listening...</span>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="flex gap-3">
+                        <div className="flex-1 relative">
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                placeholder={isListening ? "Speak now..." : "Type your message..."}
+                                disabled={sending || isListening}
+                                className="w-full px-4 py-3 rounded transition-all pr-12"
+                                style={{
+                                    backgroundColor: 'var(--color-bg-tertiary)',
+                                    border: isListening ? '2px solid var(--color-critical)' : '1px solid var(--color-border)',
+                                    color: 'var(--color-text)',
+                                }}
+                            />
+                            {/* Microphone Button */}
+                            {speechSupported && (
+                                <button
+                                    onClick={toggleListening}
+                                    disabled={sending}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded transition-all disabled:opacity-50"
+                                    style={{
+                                        backgroundColor: isListening ? 'var(--color-critical)' : 'transparent',
+                                        color: isListening ? '#ffffff' : 'var(--color-text-subdued)',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (!isListening && !e.currentTarget.disabled) {
+                                            e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (!isListening && !e.currentTarget.disabled) {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                        }
+                                    }}
+                                    title={isListening ? "Stop recording" : "Start voice input"}
+                                >
+                                    <svg 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        fill="none" 
+                                        viewBox="0 0 24 24" 
+                                        strokeWidth={2} 
+                                        stroke="currentColor" 
+                                        className={`w-5 h-5 ${isListening ? 'animate-pulse' : ''}`}
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                        <line x1="12" y1="19" x2="12" y2="23" />
+                                        <line x1="8" y1="23" x2="16" y2="23" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            onClick={sendMessage}
+                            disabled={!inputValue.trim() || sending || isListening}
+                            className="px-6 py-3 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{
+                                backgroundColor: 'var(--color-primary)',
+                                color: '#ffffff',
+                            }}
+                        >
+                            Send
+                        </button>
+                    </div>
+                    
+                    {/* Browser Support Message */}
+                    {!speechSupported && (
+                        <p className="text-xs mt-2 text-center" style={{ color: 'var(--color-text-muted)' }}>
+                            Voice input not supported in this browser. Please use Chrome, Edge, or Firefox for voice features.
+                        </p>
+                    )}
+                    {speechSupported && isFirefoxRef.current && (
+                        <p className="text-xs mt-2 text-center" style={{ color: 'var(--color-text-subdued)' }}>
+                            Firefox: Click microphone to start, click again to stop and transcribe.
+                        </p>
+                    )}
                 </div>
             </div>
         </div>
