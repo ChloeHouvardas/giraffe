@@ -8,7 +8,6 @@ interface Word {
     definition: string;
     example: string | null;
     pronunciation: string | null;
-    status: string;
     created_at: string;
     updated_at: string | null;
 }
@@ -132,17 +131,6 @@ export default function MyWords() {
     const handleLogout = async () => {
         await signOut();
         navigate('/login');
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'approved':
-                return 'var(--color-success)';
-            case 'rejected':
-                return 'var(--color-critical)';
-            default:
-                return 'var(--color-warning)';
-        }
     };
 
     const formatDate = (dateString: string) => {
@@ -299,15 +287,6 @@ export default function MyWords() {
                                                         /{word.pronunciation}/
                                                     </span>
                                                 )}
-                                                <span
-                                                    className="px-2 py-1 text-xs rounded"
-                                                    style={{
-                                                        backgroundColor: getStatusColor(word.status),
-                                                        color: 'var(--color-text)',
-                                                    }}
-                                                >
-                                                    {word.status}
-                                                </span>
                                             </div>
                                             <p className="mb-2" style={{ color: 'var(--color-text-subdued)' }}>
                                                 {word.definition}

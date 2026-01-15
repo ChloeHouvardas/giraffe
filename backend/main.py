@@ -408,7 +408,6 @@ class WordResponse(BaseModel):
     definition: str
     example: str | None
     pronunciation: str | None
-    status: str
     created_at: str
     updated_at: str | None
 
@@ -468,7 +467,6 @@ async def get_my_words(
                 "definition": word.definition,
                 "example": word.example if word.example else None,
                 "pronunciation": word.pronunciation if word.pronunciation else None,
-                "status": word.status,
                 "created_at": word.created_at.isoformat(),
                 "updated_at": word.updated_at.isoformat() if word.updated_at else None
             }
@@ -501,8 +499,7 @@ async def create_word(
             word=word_data.word,
             definition=word_data.definition,
             example=word_data.example if word_data.example else None,
-            pronunciation=word_data.pronunciation if word_data.pronunciation else None,
-            status="pending"
+            pronunciation=word_data.pronunciation if word_data.pronunciation else None
         )
         
         db.add(word)
@@ -515,7 +512,6 @@ async def create_word(
             "definition": word.definition,
             "example": word.example if word.example else None,
             "pronunciation": word.pronunciation if word.pronunciation else None,
-            "status": word.status,
             "created_at": word.created_at.isoformat(),
             "updated_at": word.updated_at.isoformat() if word.updated_at else None
         }
@@ -575,7 +571,6 @@ async def update_word(
             "definition": word.definition,
             "example": word.example if word.example else None,
             "pronunciation": word.pronunciation if word.pronunciation else None,
-            "status": word.status,
             "created_at": word.created_at.isoformat(),
             "updated_at": word.updated_at.isoformat() if word.updated_at else None
         }
@@ -672,8 +667,7 @@ async def create_words_batch(
                     word=word_data.word,
                     definition=word_data.definition,
                     example=word_data.example if word_data.example else None,
-                    pronunciation=word_data.pronunciation if word_data.pronunciation else None,
-                    status="pending"
+                    pronunciation=word_data.pronunciation if word_data.pronunciation else None
                 )
                 
                 db.add(word)
