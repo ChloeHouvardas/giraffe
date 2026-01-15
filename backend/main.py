@@ -60,14 +60,21 @@ async def test_db(db: AsyncSession = Depends(get_db)):
 def read_item(item_id:int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
-# CORS
+# CORS - Use environment variable for production
+# Supports multiple origins: "http://localhost:5173,https://your-app.vercel.app"
+ALLOWED_ORIGINS_STR = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_STR.split(",") if origin.strip()]
+
+# Log allowed origins (only in non-production)
+if os.getenv("ENVIRONMENT") != "production":
+    print(f"CORS Allowed Origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware, 
-    allow_origins=["http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
-
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["*"],
 )
 
 class TextInput(BaseModel):
