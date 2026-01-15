@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import VocabWord from '../components/VocabWord';
+import { getApiUrl } from '../config/api';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -236,7 +237,7 @@ export default function ConversationPractice() {
 
         const fetchDeck = async () => {
             try {
-                const response = await fetch(`http://localhost:8000/api/decks/${deckId}`);
+                const response = await fetch(getApiUrl(`/api/decks/${deckId}`));
                 if (!response.ok) throw new Error('Failed to load deck');
                 const data = await response.json();
                 setDeckData(data);
@@ -297,7 +298,7 @@ export default function ConversationPractice() {
                 // Save session asynchronously (don't block unmount)
                 // IMPORTANT: duration_seconds must be in SECONDS, not minutes
                 console.log(`Auto-saving conversation session: ${totalSeconds} seconds (${(totalSeconds / 60).toFixed(2)} minutes)`);
-                fetch('http://localhost:8000/api/sessions', {
+                fetch(getApiUrl('/api/sessions'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -351,7 +352,7 @@ export default function ConversationPractice() {
 
                     console.log("Starting conversation with settings:", settings);
                     
-                    const response = await fetch('http://localhost:8000/api/practice/conversation', {
+                    const response = await fetch(getApiUrl('/api/practice/conversation'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -455,7 +456,7 @@ export default function ConversationPractice() {
                 throw new Error('Cannot send empty message array');
             }
 
-            const response = await fetch('http://localhost:8000/api/practice/conversation', {
+            const response = await fetch(getApiUrl('/api/practice/conversation'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -607,7 +608,7 @@ export default function ConversationPractice() {
                         const formData = new FormData();
                         formData.append('audio', audioBlob, `recording.${mediaRecorder.mimeType.includes('webm') ? 'webm' : 'ogg'}`);
                         
-                        const response = await fetch('http://localhost:8000/api/speech-to-text', {
+                        const response = await fetch(getApiUrl('/api/speech-to-text'), {
                             method: 'POST',
                             body: formData,
                         });
@@ -719,7 +720,7 @@ export default function ConversationPractice() {
         if (user && finalDurationSeconds > 0) {
             try {
                 console.log(`Saving conversation session: ${finalDurationSeconds} seconds (${(finalDurationSeconds / 60).toFixed(2)} minutes)`);
-                await fetch('http://localhost:8000/api/sessions', {
+                await fetch(getApiUrl('/api/sessions'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -832,7 +833,7 @@ export default function ConversationPractice() {
                 content: m.content
             }));
 
-            const response = await fetch('http://localhost:8000/api/practice/conversation', {
+            const response = await fetch(getApiUrl('/api/practice/conversation'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

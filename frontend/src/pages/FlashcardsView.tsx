@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../auth/useAuth';
+import { getApiUrl } from '../config/api';
 
 interface Flashcard {
     front: string;
@@ -42,7 +43,7 @@ export default function FlashcardsView() {
             }
 
             try {
-                const response = await fetch(`http://localhost:8000/api/decks/${deckId}`);
+                const response = await fetch(getApiUrl(`/api/decks/${deckId}`));
                 
                 if (!response.ok) {
                     if (response.status === 404) {
@@ -111,7 +112,7 @@ export default function FlashcardsView() {
                 // Save session asynchronously (don't block unmount)
                 // IMPORTANT: duration_seconds must be in SECONDS, not minutes
                 console.log(`Auto-saving flashcard session: ${totalSeconds} seconds (${(totalSeconds / 60).toFixed(2)} minutes)`);
-                fetch('http://localhost:8000/api/sessions', {
+                fetch(getApiUrl('/api/sessions'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

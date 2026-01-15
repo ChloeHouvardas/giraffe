@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
+import { getApiUrl } from '../config/api';
 
 interface Deck {
     id: string;
@@ -37,7 +38,7 @@ export default function MyDecks() {
                 params.append('search', searchQuery);
             }
             
-            const response = await fetch(`http://localhost:8000/api/my-decks?${params.toString()}`);
+            const response = await fetch(getApiUrl(`/api/my-decks?${params.toString()}`));
             
             if (!response.ok) {
                 throw new Error(`Error: ${response.status}`);
@@ -66,7 +67,7 @@ export default function MyDecks() {
         }
         
         try {
-            const response = await fetch(`http://localhost:8000/api/decks/${deckId}?user_id=${user.id}`, {
+            const response = await fetch(getApiUrl(`/api/decks/${deckId}?user_id=${user.id}`), {
                 method: 'DELETE',
             });
             
@@ -90,7 +91,7 @@ export default function MyDecks() {
         if (!user || !editingDeck) return;
         
         try {
-            const response = await fetch(`http://localhost:8000/api/decks/${editingDeck.id}?user_id=${user.id}`, {
+            const response = await fetch(getApiUrl(`/api/decks/${editingDeck.id}?user_id=${user.id}`), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

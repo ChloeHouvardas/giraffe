@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../config/api';
 
 interface Word {
     id: string;
@@ -46,7 +47,7 @@ export default function MyWords() {
                 params.append('search', searchQuery);
             }
             
-            const response = await fetch(`http://localhost:8000/api/my-words?${params.toString()}`);
+            const response = await fetch(getApiUrl(`/api/my-words?${params.toString()}`));
             
             if (!response.ok) {
                 throw new Error(`Error: ${response.status}`);
@@ -75,7 +76,7 @@ export default function MyWords() {
         }
         
         try {
-            const response = await fetch(`http://localhost:8000/api/words/${wordId}?user_id=${user.id}`, {
+            const response = await fetch(getApiUrl(`/api/words/${wordId}?user_id=${user.id}`), {
                 method: 'DELETE',
             });
             
@@ -104,7 +105,7 @@ export default function MyWords() {
         if (!user || !editingWord) return;
         
         try {
-            const response = await fetch(`http://localhost:8000/api/words/${editingWord.id}?user_id=${user.id}`, {
+            const response = await fetch(getApiUrl(`/api/words/${editingWord.id}?user_id=${user.id}`), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

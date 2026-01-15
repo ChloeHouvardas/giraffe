@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../config/api';
 
 interface DeckData {
     deck_id: string;
@@ -34,7 +35,7 @@ export default function ConversationSettings() {
 
         const fetchDeck = async () => {
             try {
-                const response = await fetch(`http://localhost:8000/api/decks/${deckId}`);
+                const response = await fetch(getApiUrl(`/api/decks/${deckId}`));
                 if (!response.ok) throw new Error('Failed to load deck');
                 const data = await response.json();
                 setDeckData({

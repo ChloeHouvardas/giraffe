@@ -2,7 +2,8 @@ import { useState } from "react";
 import TextArea from "./TextArea";
 // import FileUpload from "./FileUpload";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";  
+import { useAuth } from "../auth/useAuth";
+import { getApiUrl } from "../config/api";  
 
 // interface Flashcard {
 //     front: string;
@@ -38,7 +39,7 @@ export default function FlashcardGenerator() {
         setError(null);
         
         try {
-            const response = await fetch('http://localhost:8000/api/generate-flashcards', {
+            const response = await fetch(getApiUrl('/api/generate-flashcards'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

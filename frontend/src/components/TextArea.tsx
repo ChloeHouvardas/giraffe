@@ -23,7 +23,8 @@ export default function TextArea({
     //     const form = e.target as HTMLFormElement;
     //     const formData = new FormData(form);
 
-    //     fetch('http://localhost:8000/api/generate-flashcards', { method: form.method, body: formData });
+    //     import { getApiUrl } from '../config/api';
+    //     fetch(getApiUrl('/api/generate-flashcards'), { method: form.method, body: formData });
     // }
     
 

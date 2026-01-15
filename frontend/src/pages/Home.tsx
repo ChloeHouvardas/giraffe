@@ -2,6 +2,7 @@ import FlashcardGenerator from "../components/FlashCardGenerator";
 import { useAuth } from '../auth/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { getApiUrl } from '../config/api';
 
 
 interface PracticeTypeStats {
@@ -39,7 +40,7 @@ export default function Home() {
 
         const fetchDailyStats = async () => {
             try {
-                const response = await fetch(`http://localhost:8000/api/stats/daily?user_id=${user.id}`);
+                const response = await fetch(getApiUrl(`/api/stats/daily?user_id=${user.id}`));
                 if (response.ok) {
                     const data = await response.json();
                     setDailyStats(data);
@@ -63,7 +64,7 @@ export default function Home() {
         
         setSavingGoal(true);
         try {
-            const response = await fetch(`http://localhost:8000/api/user-settings?user_id=${user.id}`, {
+            const response = await fetch(getApiUrl(`/api/user-settings?user_id=${user.id}`), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ export default function Home() {
             if (response.ok) {
                 setShowSettings(false);
                 // Refresh stats
-                const statsResponse = await fetch(`http://localhost:8000/api/stats/daily?user_id=${user.id}`);
+                const statsResponse = await fetch(getApiUrl(`/api/stats/daily?user_id=${user.id}`));
                 if (statsResponse.ok) {
                     const data = await statsResponse.json();
                     setDailyStats(data);

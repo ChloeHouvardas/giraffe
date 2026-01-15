@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { getApiUrl } from '../config/api';
 
 interface Flashcard {
     front: string;
@@ -48,7 +49,7 @@ export default function GeneratedDeckPreview() {
         setError(null);
         
         try {
-            const response = await fetch(`http://localhost:8000/api/decks/${deckId}`);
+            const response = await fetch(getApiUrl(`/api/decks/${deckId}`));
             
             if (!response.ok) {
                 throw new Error('Failed to load deck');
@@ -116,7 +117,7 @@ export default function GeneratedDeckPreview() {
 
         try {
             // Use batch endpoint for better performance
-            const response = await fetch('http://localhost:8000/api/words/batch', {
+            const response = await fetch(getApiUrl('/api/words/batch'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
