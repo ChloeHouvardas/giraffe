@@ -60,8 +60,8 @@ export default function FlashcardGenerator() {
             console.log('Generated deck:', data.deck_id);
             console.log('Flashcards:', data.flashcards);
             
-            // Navigate to FlashcardsView with deck ID in URL
-            navigate(`/flashcards/${data.deck_id}`);
+            // Navigate to preview screen instead of directly to flashcards
+            navigate(`/preview/${data.deck_id}`);
             
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');

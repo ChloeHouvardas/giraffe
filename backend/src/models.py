@@ -36,3 +36,19 @@ class Flashcard(Base):
     
     def __repr__(self):
         return f"<Flashcard {self.id}: {self.front}>"
+
+class Word(Base):
+    __tablename__ = "words"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    word = Column(String, nullable=False)
+    definition = Column(Text, nullable=False)
+    example = Column(Text, nullable=True)
+    pronunciation = Column(String, nullable=True)
+    status = Column(String, default="pending")  # pending, approved, rejected
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<Word {self.id}: {self.word}>"
