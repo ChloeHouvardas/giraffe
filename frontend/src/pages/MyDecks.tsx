@@ -350,6 +350,22 @@ export default function MyDecks() {
                                     >
                                         Practice
                                     </button>
+                                    <button
+                                        onClick={() => navigate(`/practice/conversation/${deck.id}`)}
+                                        className="w-full px-4 py-2 rounded transition-all font-medium"
+                                        style={{
+                                            backgroundColor: 'var(--color-info)',
+                                            color: '#ffffff',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.opacity = '0.9';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.opacity = '1';
+                                        }}
+                                    >
+                                        Start Conversation
+                                    </button>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => handleEdit(deck)}

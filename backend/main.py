@@ -695,3 +695,138 @@ async def create_words_batch(
     except Exception as e:
         print(f"Error creating words batch: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Conversational Practice API endpoints
+
+class ConversationMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+class ConversationRequest(BaseModel):
+    deck_id: str
+    user_id: str
+    messages: list[ConversationMessage]
+    is_first_message: bool = False
+
+class ConversationResponse(BaseModel):
+    message: str
+    words_used: list[str] = []
+
+@app.post("/api/practice/conversation")
+async def practice_conversation(
+    request: ConversationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate AI tutor response for conversational practice"""
+    try:
+        from sqlalchemy import select
+        
+        # Convert IDs to UUID
+        try:
+            deck_uuid = uuid.UUID(request.deck_id)
+            user_uuid = uuid.UUID(request.user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+        
+        # Get deck and verify ownership
+        deck_result = await db.execute(
+            select(Deck).where(Deck.id == deck_uuid, Deck.user_id == user_uuid)
+        )
+        deck = deck_result.scalar_one_or_none()
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        # Get flashcards for this deck
+        flashcards_result = await db.execute(
+            select(Flashcard).where(Flashcard.deck_id == deck_uuid)
+        )
+        flashcards = flashcards_result.scalars().all()
+        
+        if not flashcards:
+            raise HTTPException(status_code=400, detail="Deck has no flashcards")
+        
+        # Validate messages array
+        if not request.messages or len(request.messages) == 0:
+            raise HTTPException(status_code=400, detail="At least one message is required")
+        
+        # Build vocabulary list
+        vocabulary_words = [{"word": f.front, "definition": f.back} for f in flashcards]
+        words_list = "\n".join([f"- {w['word']} ({w['definition']})" for w in vocabulary_words])
+        
+        # Create system prompt
+        system_prompt = f"""You are a friendly and encouraging language tutor helping a student practice vocabulary words.
+
+VOCABULARY WORDS TO PRACTICE:
+{words_list}
+
+YOUR ROLE:
+- Have a natural, engaging conversation with the student
+- Naturally incorporate 3-5 vocabulary words from the list in each response
+- Use the words in context so the student can understand their meaning
+- Ask questions that encourage the student to use these words
+- Gently correct any mistakes and explain the right usage
+- Be encouraging and supportive
+- Adapt your language complexity based on the student's responses
+
+CONVERSATION STYLE:
+- Keep responses conversational (2-4 sentences)
+- Use clear, natural language
+- If student seems confused, provide simpler explanations
+- Celebrate when they use vocabulary words correctly
+- Don't explicitly list the words you're using - just use them naturally
+
+{f'Start by greeting the student and suggesting an interesting topic to discuss that would allow natural use of the vocabulary words.' if request.is_first_message else 'Continue the conversation naturally, incorporating vocabulary words.'}"""
+        
+        # Validate messages array
+        if not request.messages or len(request.messages) == 0:
+            raise HTTPException(status_code=400, detail="At least one message is required")
+        
+        # Prepare messages for Claude
+        claude_messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        print(f"💬 Generating conversation response for deck {request.deck_id}")
+        print(f"   Messages count: {len(claude_messages)}")
+        print(f"   First message: {claude_messages[0] if claude_messages else 'NONE'}")
+        
+        # Get API key
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        
+        client = Anthropic(api_key=api_key)
+        
+        # Call Claude API
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            system=system_prompt,
+            messages=claude_messages
+        )
+        
+        ai_response = message.content[0].text
+        
+        # Extract words used (simple pattern matching)
+        words_used = []
+        response_lower = ai_response.lower()
+        for vocab in vocabulary_words:
+            if vocab['word'].lower() in response_lower:
+                words_used.append(vocab['word'])
+        
+        print(f"✅ Generated response with {len(words_used)} vocabulary words")
+        
+        return {
+            "message": ai_response,
+            "words_used": words_used
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in conversation: {e}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
